@@ -188,6 +188,8 @@
       'github.section.unassigned':'Open issues (no assignee)',
       'github.empty-unassigned':'No unassigned open issues.',
       'github.section.prs':     'Open PRs',
+      'github.section.my-recent-prs': 'My recent PRs (merged + closed)',
+      'github.empty-my-prs':    'No recent merged or closed PRs by you.',
       'github.unassigned.add-tip': 'Claim issue #{number} in {repo} and create a workspace',
       'github.claim.prompt':    'Assign issue #{number} in {repo} to yourself and create a workspace?\n\nOK = claim + create.\nCancel = create the workspace without claiming.',
       'github.claim.toast.ok':  '✓ assigned to @{login}',
@@ -6124,15 +6126,17 @@
     if (btn) btn.disabled = true;
     try {
       const qs = force ? '?force=1' : '';
-      const [issuesR, prsR, unassignedR, prefsR] = await Promise.all([
+      const [issuesR, prsR, unassignedR, myClosedR, prefsR] = await Promise.all([
         fetch('/api/github/issues' + qs, { cache: 'no-store' }).then(r => r.json()),
         fetch('/api/github/prs' + qs, { cache: 'no-store' }).then(r => r.json()),
         fetch('/api/github/issues/unassigned' + qs,
               { cache: 'no-store' }).then(r => r.json()),
+        fetch('/api/github/prs/my-closed' + qs,
+              { cache: 'no-store' }).then(r => r.json()),
         fetch('/api/preferences', { cache: 'no-store' }).then(r => r.json()),
       ]);
       githubModalPrefs = (prefsR && prefsR.preferences) || {};
-      renderGithubModal(issuesR, prsR, unassignedR);
+      renderGithubModal(issuesR, prsR, unassignedR, myClosedR);
     } catch (err) {
       const body = document.getElementById('github-body');
       if (body) body.replaceChildren(h('div', { class: 'muted',
@@ -6222,7 +6226,7 @@
     return h('span', { class: `github-pill github-pill-${kind}` }, label);
   }
 
-  function renderGithubModal(issuesR, prsR, unassignedR) {
+  function renderGithubModal(issuesR, prsR, unassignedR, myClosedR) {
     const body = document.getElementById('github-body');
     if (!body) return;
     const repos = (issuesR?.repos || prsR?.repos
@@ -6337,6 +6341,27 @@
         mergedAt: pr.mergedAt, closedAt: pr.closedAt,
       })), 'github.empty-prs', { isPR: true }),
     );
+    // "My recent PRs" — merged + closed, bounded by my own activity
+    // (the server filters by author=me login). Hidden when there
+    // are no rows + no error, so the modal stays compact for new
+    // repos without any merged work yet.
+    const myClosed = (myClosedR?.prs || []);
+    const myClosedErr = myClosedR?.error;
+    if (myClosed.length || myClosedErr) {
+      children.push(
+        h('h4', { style: { padding: '0.6rem 1rem 0', margin: 0 } },
+          t('github.section.my-recent-prs')),
+        myClosedErr && !myClosed.length
+          ? h('div', { class: 'muted',
+                         style: { padding: '0.5rem 1rem' } },
+              myClosedErr)
+          : issueTable(myClosed.map(pr => ({
+              repo: pr.repo, number: pr.number, title: pr.title,
+              state: pr.state, url: pr.url, isDraft: pr.isDraft,
+              mergedAt: pr.mergedAt, closedAt: pr.closedAt,
+            })), 'github.empty-my-prs', { isPR: true }),
+      );
+    }
     body.replaceChildren(...children);
   }
 

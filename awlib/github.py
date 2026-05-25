@@ -224,6 +224,98 @@ def fetch_my_prs(force: bool = False) -> tuple[list[dict], str | None]:
     return all_prs, ("; ".join(errs) if errs else None)
 
 
+# Per-repo closed-PRs cache, shaped the same way as _PR_CACHE.
+# Kept separate so a fresh "my open PRs" fetch doesn't pay the cost
+# of also paginating through every closed PR (which can be large
+# on long-lived repos).
+_MY_CLOSED_PR_CACHE: dict = {}
+_MY_CLOSED_CAP_PER_REPO = 20   # plenty for "what did I recently land"
+
+
+def _rest_list_my_closed_prs(repo: str, login: str
+                              ) -> tuple[list[dict] | None, str | None]:
+    """Recent merged + closed-without-merging PRs authored by `login`
+    in `repo`. Sorted by updatedAt desc and capped at the per-repo
+    cap so the modal stays responsive even on repos with thousands
+    of historical PRs.
+
+    REST returns 'closed' for both merged-and-not — disambiguated
+    downstream via mergedAt."""
+    token = _resolve_token()
+    data, err = _request(
+        f"{_API_BASE}/repos/{repo}/pulls"
+        f"?state=closed&sort=updated&direction=desc&per_page=100",
+        token)
+    if data is None:
+        return None, err
+    if not isinstance(data, list):
+        return None, "unexpected response shape"
+    out: list[dict] = []
+    for pr in data:
+        user_login = ((pr.get("user") or {}).get("login")) or ""
+        if user_login.lower() != login.lower():
+            continue
+        out.append({
+            "repo": repo,
+            "number": pr.get("number"),
+            "title": pr.get("title") or "",
+            "state": pr.get("state") or "",
+            "url": pr.get("html_url") or "",
+            "headRefName": ((pr.get("head") or {}).get("ref")) or "",
+            "isDraft": bool(pr.get("draft")),
+            "updatedAt": pr.get("updated_at") or "",
+            "mergedAt": pr.get("merged_at") or "",
+            "closedAt": pr.get("closed_at") or "",
+            "author": {"login": user_login},
+        })
+        if len(out) >= _MY_CLOSED_CAP_PER_REPO:
+            break
+    return out, None
+
+
+def _fetch_repo_my_closed_prs(repo: str, login: str, force: bool
+                               ) -> tuple[list[dict], str | None]:
+    now = time.time()
+    entry = _MY_CLOSED_PR_CACHE.get(repo)
+    if not force and entry and (now - entry["ts"]) < _CACHE_TTL:
+        return entry["prs"], entry["err"]
+    prs, err = _rest_list_my_closed_prs(repo, login)
+    if prs is None:
+        _MY_CLOSED_PR_CACHE[repo] = {"prs": [], "err": err or "unreachable",
+                                       "ts": now}
+        return [], err
+    _MY_CLOSED_PR_CACHE[repo] = {"prs": prs, "err": None, "ts": now}
+    return prs, None
+
+
+def fetch_my_closed_prs(force: bool = False
+                         ) -> tuple[list[dict], str | None]:
+    """PRs I authored that are merged or closed-without-merging.
+    Bounded by my own activity (not everyone else's), so safe to
+    keep visible in the dashboard even on long-lived repos.
+
+    Sorted by updatedAt desc, capped at the per-repo cap so the
+    modal stays responsive. Returns ([], None) when no token /
+    can't resolve /user."""
+    if not _REPOS:
+        return [], "GitHub not configured"
+    token = _resolve_token()
+    if not token:
+        return [], "no GITHUB_TOKEN — can't resolve current user"
+    login = _whoami(token)
+    if not login:
+        return [], "couldn't resolve /user — check token validity"
+    all_prs: list[dict] = []
+    errs: list[str] = []
+    for repo in _REPOS:
+        prs, err = _fetch_repo_my_closed_prs(repo, login, force)
+        all_prs.extend(prs)
+        if err:
+            errs.append(f"{repo}: {err}")
+    all_prs.sort(key=lambda pr: pr.get("updatedAt") or "", reverse=True)
+    return all_prs, ("; ".join(errs) if errs else None)
+
+
 def pr_for_workspace(workspace: str) -> dict | None:
     """First PR whose head branch matches the workspace folder name."""
     if not workspace:

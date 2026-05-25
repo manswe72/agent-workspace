@@ -5263,6 +5263,15 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                 self._send_json(200, {"prs": items, "error": err,
                                        "repos": _github.configured_repos()})
 
+            elif path == "/api/github/prs/my-closed":
+                # PRs I authored that are merged or closed. Bounded
+                # by my own activity so the list doesn't grow
+                # unboundedly the way "everyone's closed PRs" would.
+                force = qs.get("force", ["0"])[0] in ("1", "true", "yes")
+                items, err = _github.fetch_my_closed_prs(force=force)
+                self._send_json(200, {"prs": items, "error": err,
+                                       "repos": _github.configured_repos()})
+
             elif path == "/api/notes":
                 issue = (qs.get("issue", [""])[0] or "").strip() or None
                 conn = db_connect()
