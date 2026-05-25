@@ -1,4 +1,4 @@
-# bash completion for claude-workspace-sync
+# bash completion for agent-workspace-sync
 _claude_workspace_sync() {
   local cur
   COMPREPLY=()
@@ -7,4 +7,4 @@ _claude_workspace_sync() {
     COMPREPLY=( $(compgen -W "--quiet" -- "$cur") )
   fi
 }
-complete -F _claude_workspace_sync claude-workspace-sync
+complete -F _claude_workspace_sync agent-workspace-sync

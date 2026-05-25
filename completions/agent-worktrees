@@ -1,4 +1,4 @@
-# bash completion for claude-worktrees
+# bash completion for agent-worktrees
 _claude_worktrees() {
   local cur
   COMPREPLY=()
@@ -16,4 +16,4 @@ _claude_worktrees() {
     fi
   fi
 }
-complete -F _claude_worktrees claude-worktrees
+complete -F _claude_worktrees agent-worktrees

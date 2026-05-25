@@ -1,4 +1,4 @@
-# bash completion for claude-worktrees-server
+# bash completion for agent-worktrees-server
 # Installed by setup.sh into ~/.local/share/bash-completion/completions/.
 _claude_worktrees_server() {
   local cur prev opts
@@ -29,4 +29,4 @@ _claude_worktrees_server() {
     COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
   fi
 }
-complete -F _claude_worktrees_server claude-worktrees-server
+complete -F _claude_worktrees_server agent-worktrees-server
