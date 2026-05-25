@@ -1,6 +1,7 @@
 """Provider ABC + helper utilities."""
 from __future__ import annotations
 
+import json
 import re
 import shlex
 import shutil
@@ -44,6 +45,100 @@ def marker_state(cwd: Path, provider_id: str) -> str:
     if age <= 24 * 60 * 60:
         return "idle"
     return "closed"
+
+
+def dashboard_mcp_url() -> str:
+    """The URL non-Claude providers point their MCP config at.
+
+    Includes the port the dashboard is listening on (read from the
+    `AGENT_WORKSPACE_PORT` env var the launcher exports). Path is
+    plain `/mcp` — agent identity flows through the `X-Agent-Id`
+    header, populated from the `AGENT_WORKSPACE_AGENT_ID` env var
+    that the launcher also sets per-shell."""
+    import os
+    port = os.environ.get("AGENT_WORKSPACE_PORT", "8765")
+    return f"http://127.0.0.1:{port}/mcp"
+
+
+def mcp_server_name() -> str:
+    """Slug the dashboard registers under in each provider's config."""
+    return "agent-workspace"
+
+
+def ensure_cursor_mcp_config() -> Path:
+    """Idempotently merge the dashboard's MCP server into
+    `~/.cursor/mcp.json`. Returns the path. Leaves any other
+    pre-existing entries the user added themselves intact."""
+    cfg_path = Path.home() / ".cursor" / "mcp.json"
+    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    name = mcp_server_name()
+    entry = {
+        "url": dashboard_mcp_url(),
+        "headers": {"X-Agent-Id": "${AGENT_WORKSPACE_AGENT_ID}"},
+    }
+    cfg: dict = {}
+    if cfg_path.is_file():
+        try:
+            cfg = json.loads(cfg_path.read_text() or "{}")
+            if not isinstance(cfg, dict):
+                cfg = {}
+        except (OSError, ValueError):
+            cfg = {}
+    servers = cfg.setdefault("mcpServers", {})
+    if not isinstance(servers, dict):
+        servers = {}
+        cfg["mcpServers"] = servers
+    # Only rewrite our own entry — preserve anything else.
+    if servers.get(name) != entry:
+        servers[name] = entry
+        cfg_path.write_text(json.dumps(cfg, indent=2) + "\n")
+        cfg_path.chmod(0o600)
+    return cfg_path
+
+
+def ensure_codex_mcp_config() -> Path:
+    """Idempotently merge the dashboard's MCP server into
+    `~/.codex/config.toml` under `[mcp_servers.agent-workspace]`.
+
+    Uses a tiny TOML reader/writer (no toml dep — stdlib stays the
+    rule). Edits only the one section; preserves the rest of the
+    file byte-for-byte."""
+    cfg_path = Path.home() / ".codex" / "config.toml"
+    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    name = mcp_server_name()
+    block_header = f"[mcp_servers.{name}]"
+    new_block = (
+        f"{block_header}\n"
+        f'url = "{dashboard_mcp_url()}"\n'
+        f'headers = {{ "X-Agent-Id" = "${{AGENT_WORKSPACE_AGENT_ID}}" }}\n'
+        f'approval_policy = "never"\n'
+    )
+    existing = cfg_path.read_text() if cfg_path.is_file() else ""
+    if block_header in existing:
+        # Replace the existing block (header → next header-or-EOF).
+        lines = existing.splitlines(keepends=True)
+        out_lines: list[str] = []
+        i = 0
+        while i < len(lines):
+            if lines[i].rstrip() == block_header:
+                # Skip until the next section header or EOF.
+                out_lines.append(new_block)
+                if not out_lines[-1].endswith("\n"):
+                    out_lines[-1] += "\n"
+                i += 1
+                while i < len(lines) and not lines[i].lstrip().startswith("["):
+                    i += 1
+            else:
+                out_lines.append(lines[i])
+                i += 1
+        new_text = "".join(out_lines)
+    else:
+        sep = "" if existing.endswith("\n") or not existing else "\n"
+        new_text = existing + sep + ("\n" if existing else "") + new_block
+    if new_text != existing:
+        cfg_path.write_text(new_text)
+        cfg_path.chmod(0o600)
+    return cfg_path
 
 
 def liveness_bash_block(marker_path: Path) -> str:

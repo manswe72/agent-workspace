@@ -1,33 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" shape-rendering="crispEdges">
-  <!-- Background — solid rounded square. GitHub crops circular,
-       so the corners can be square; the rounding just looks nice
-       in places that show the full bitmap (org cards, READMEs). -->
-  <rect width="24" height="24" rx="3" ry="3" fill="#0d1117"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Agent Workspace GitHub profile icon. Square version of the
+     dashboard favicon: dark rounded slate background with the
+     bright-blue git-branch glyph centered on it. Matches the
+     PWA / dock entry the user sees. GitHub crops avatars to a
+     circle in most places; the rounded-square corners just look
+     nice in the few spots that show the full bitmap. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Slate background -->
+  <rect width="64" height="64" rx="10" ry="10" fill="#1f2328"/>
 
-  <!-- Pixel-art agent (same silhouette as static/agent-icon.svg,
-       scaled up + centered in a 24x24 square). Warm orange so the
-       avatar reads at small sizes without depending on the page's
-       currentColor. -->
-  <g fill="#f57c00">
-    <!-- Head -->
-    <rect x="6" y="4" width="12" height="6"/>
-    <!-- Belt / arms (extending out past the body) -->
-    <rect x="3" y="9" width="18" height="2"/>
-    <!-- Lower body -->
-    <rect x="6" y="11" width="12" height="2"/>
-    <!-- Two legs -->
-    <rect x="8"  y="13" width="2" height="4"/>
-    <rect x="14" y="13" width="2" height="4"/>
-    <!-- Antenna stub for character -->
-    <rect x="11" y="2" width="2" height="2"/>
-  </g>
-
-  <!-- Eyes — bright cyan dots that stay readable at favicon size.
-       The original icon uses near-black eyes against a colored
-       robot; on a dark page background that goes invisible, so we
-       invert the contrast here. -->
-  <g fill="#e6fbff">
-    <rect x="9"  y="6" width="1" height="2"/>
-    <rect x="14" y="6" width="1" height="2"/>
+  <!-- Git-branch glyph — same shape + colour as static/favicon.svg
+       but scaled to 2× and centered with a bit of breathing room. -->
+  <g fill="#0969da" stroke="#0969da" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="20" y1="18" x2="20" y2="46"/>
+    <path d="M 20 32 L 46 32" fill="none"/>
+    <circle cx="20" cy="12" r="7"/>
+    <circle cx="20" cy="52" r="7"/>
+    <circle cx="50" cy="32" r="7"/>
   </g>
 </svg>

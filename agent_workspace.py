@@ -5713,10 +5713,15 @@ def make_handler(worktrees_root: Path, behind_limit: int,
             """JSON-RPC 2.0 endpoint for the agent-to-agent MCP server.
 
             Body is a single JSON-RPC request; the agent's identity
-            lives in the URL query string (?agent=<issue> or
-            ?agent=__agent__). The dispatcher in
-            awlib/agent_mcp.McpServer does all the real work and
-            decides what to return.
+            comes from (in priority order):
+              1. URL query string  ?agent=<id>      (Claude Code path)
+              2. HTTP header        X-Agent-Id: <id> (Cursor / Codex /
+                 Gemini path — their MCP configs are global and the
+                 per-launch identity flows through a custom header)
+              3. Empty (rejected by the dispatcher)
+
+            The dispatcher in awlib/agent_mcp.McpServer does all the
+            real work and decides what to return.
             """
             # MCP can be disabled via the dashboard pref (default ON).
             # Honour that here as defence in depth — even if the
@@ -5726,6 +5731,8 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                 self._send_json(503, {"error": "mcp disabled"})
                 return
             agent = (qs.get("agent", [""])[0] or "").strip()
+            if not agent:
+                agent = (self.headers.get("X-Agent-Id") or "").strip()
             body = self._read_json_body() or {}
             # The dispatcher uses these callbacks to validate
             # send_message recipients and pick broadcast targets.
