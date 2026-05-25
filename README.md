@@ -216,6 +216,21 @@ Build a release tarball for distribution with:
 # → dist/agent-workspace-<VERSION>.tar.gz
 ```
 
+Cut a full GitHub release (tag + tarball upload + release notes) in
+one command. Requires the [`gh` CLI](https://cli.github.com/) and a
+prior `gh auth login`:
+
+```bash
+./bin/release.sh                       # release current VERSION
+./bin/release.sh --version 0.2.0       # bump VERSION + release
+./bin/release.sh --dry-run             # print plan, no changes
+```
+
+Release notes default to commit subjects since the previous tag.
+Override with `--notes "..."` or `--notes-file CHANGELOG.md`. Pass
+`--draft` to stage a release without publishing it, `--prerelease`
+to mark a non-stable version.
+
 ### Windows (via Git Bash)
 
 The server detects Windows at startup and switches to Microsoft's
