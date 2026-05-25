@@ -4931,6 +4931,19 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                     "repos": _github.configured_repos(),
                 })
 
+            elif path == "/api/github/available-repos":
+                # All repos the user can access (owned + org-member +
+                # collaborator). Lets the Profile picker show a list
+                # instead of forcing manual "owner/repo" typing.
+                force = qs.get("force", ["0"])[0] in ("1", "true", "yes")
+                items, err = _github.fetch_available_repos(force=force)
+                # Mark which are already in the user's github-repos
+                # preference so the UI can grey them out.
+                configured = set(_github.configured_repos())
+                for it in items:
+                    it["already_added"] = it.get("slug", "") in configured
+                self._send_json(200, {"repos": items, "error": err})
+
             elif path == "/api/providers":
                 from awlib import providers as _providers
                 self._send_json(200, {

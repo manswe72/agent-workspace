@@ -588,8 +588,10 @@
       'profile.agent.general.inherit': 'Inherit default',
       'profile.agent.general.inherit-tip': 'Use whatever the default is (currently {id}).',
       'profile.tab.model':      'Model',
-      'profile.help.model':     'Model passed via `--model …` when the 🤖 Agent button opens a terminal for the currently-selected provider. Default = let the CLI pick.',
+      'profile.help.model':     'Each sub-tab configures one agent CLI\'s default model. The pick that runs is whatever the active provider (or per-workspace override) selects.',
       'profile.label.model':    'Model',
+      'profile.model.subtab.general-agent': 'General Agent',
+      'profile.model.general.cli': 'GENERAL AGENT CLI',
       'profile.label.general-agent-model.generic': 'General Agent model',
       'profile.help.general-agent-model.generic': 'Override the model for the pinned General Agent tab. Inherits the default above unless you pick one here.',
       'profile.tab.claude-model': 'Claude model',
@@ -699,9 +701,17 @@
       'profile.label.pr-poll.minutes':   'minutes',
       'profile.help.pr-poll':            'When on, every <interval> minutes the dashboard checks every PR whose head branch matches a workspace folder for review requests, review submissions, merges, closes, and new comments. Each new event becomes a 🔔 badge on the matching workspace tab. Off by default — anonymous installs would otherwise burn the 60 req/h rate-limit unprompted.',
       'github.repos.add':            '+ Add repo',
-      'github.repos.empty':          'No repos configured yet. Add at least one "owner/repo" entry.',
+      'github.repos.empty':          'No repos configured yet. Click + Add repo to pick one.',
       'github.repos.bad-format':     'Repo must be "owner/repo".',
       'github.repos.remove-tip':     'Stop tracking {slug}',
+      'github.picker.title':         'Pick a GitHub repo to track',
+      'github.picker.search':        'Filter (name or description)…',
+      'github.picker.click-to-add':  'click to add',
+      'github.picker.already-added': 'already added',
+      'github.picker.empty':         'No repos found for this token.',
+      'github.picker.no-matches':    'No repos match "{q}".',
+      'github.picker.add-manual':    '+ Add',
+      'github.picker.manual-fallback': 'If the repo you want isn\'t in the list above, type "owner/repo" here and add it directly.',
       'github.pick-repos':           'Clone which repos for #{number}?',
       'github.create-with':          'Create with {n} repo(s)',
       'profile.help.editor':    'Used when you click a file path in a Working tree list.',
@@ -1114,8 +1124,10 @@
       'profile.agent.general.inherit': 'Ärver standard',
       'profile.agent.general.inherit-tip': 'Använd standardvalet (just nu {id}).',
       'profile.tab.model':      'Modell',
-      'profile.help.model':     'Modell som skickas via `--model …` när 🤖 Agent-knappen startar en terminal för aktuell provider. Tom = låt CLI:t välja.',
+      'profile.help.model':     'Varje sub-flik konfigurerar ett agent-CLI:s standardmodell. Vald modell på körning beror på aktiv provider (eller per-workspace-override).',
       'profile.label.model':    'Modell',
+      'profile.model.subtab.general-agent': 'General Agent',
+      'profile.model.general.cli': 'GENERAL AGENT CLI',
       'profile.label.general-agent-model.generic': 'Modell för General Agent',
       'profile.help.general-agent-model.generic': 'Sätt en egen modell för den fasta General Agent-fliken. Ärver standardvärdet ovan om du inte väljer här.',
       'profile.tab.claude-model': 'Claude-modell',
@@ -1227,9 +1239,17 @@
       'profile.label.pr-poll.minutes':   'minuter',
       'profile.help.pr-poll':            'När på kollar dashboarden var <intervall> minuter varje PR vars huvudbranch matchar en workspace-mapp efter review-förfrågningar, granskningar, merges, stängningar och nya kommentarer. Varje ny händelse blir ett 🔔 på matchande workspace-flik. Av som standard — anonyma installationer skulle annars sluka 60 req/h-kvoten utan användarens vetskap.',
       'github.repos.add':            '+ Lägg till repo',
-      'github.repos.empty':          'Inga repon konfigurerade än. Lägg till minst en "owner/repo".',
+      'github.repos.empty':          'Inga repon konfigurerade än. Klicka på + Lägg till repo och välj ett.',
       'github.repos.bad-format':     'Repo måste skrivas som "owner/repo".',
       'github.repos.remove-tip':     'Sluta följa {slug}',
+      'github.picker.title':         'Välj ett GitHub-repo att följa',
+      'github.picker.search':        'Filtrera (namn eller beskrivning)…',
+      'github.picker.click-to-add':  'klicka för att lägga till',
+      'github.picker.already-added': 'redan tillagt',
+      'github.picker.empty':         'Inga repon hittades för denna token.',
+      'github.picker.no-matches':    'Inga träffar för "{q}".',
+      'github.picker.add-manual':    '+ Lägg till',
+      'github.picker.manual-fallback': 'Om det repo du vill ha inte finns i listan ovan skriver du "owner/repo" här och lägger till manuellt.',
       'github.pick-repos':           'Klona vilka repon för #{number}?',
       'github.create-with':          'Skapa med {n} repon',
       'profile.help.editor':    'Används när du klickar på en filsökväg i en arbetsträd-lista.',
@@ -2049,32 +2069,167 @@
     }
     paintRows();
 
-    const input = h('input', {
+    async function addRepoSlug(slug) {
+      const v = (slug || '').trim();
+      if (!v || !/^[^\s/]+\/[^\s/]+$/.test(v)) {
+        showToast('error', t('github.repos.bad-format'));
+        return false;
+      }
+      if (repos.includes(v)) {
+        showToast('warn', `already added: ${v}`);
+        return false;
+      }
+      repos.push(v);
+      try {
+        await save(repos);
+        showToast('ok', `added ${v}`);
+      } catch (err) {
+        showToast('error', `save failed: ${err}`);
+        return false;
+      }
+      paintRows();
+      return true;
+    }
+    const addBtn = h('button', {
+      type: 'button',
+      class: 'btn btn-inline btn-primary',
+      onclick: (e) => { e.preventDefault(); openRepoPickerDialog(addRepoSlug); },
+    }, t('github.repos.add'));
+    host.replaceChildren(rowsHost,
+      h('div', { class: 'github-repos-add' }, addBtn));
+  }
+
+  // Modal that fetches /api/github/available-repos and lets the user
+  // click one to add to the tracked list. Includes a search box for
+  // users with many repos, plus a manual-entry fallback if the repo
+  // they want isn't in the API response (e.g. a freshly-created
+  // private repo where the token's cache hasn't refreshed).
+  function openRepoPickerDialog(onPick) {
+    const backdrop = h('div', { class: 'logs-modal-backdrop',
+      style: { alignItems: 'flex-start' },
+      onclick: (e) => { if (e.target === backdrop) close(); } });
+    function close() {
+      backdrop.remove();
+      document.removeEventListener('keydown', escHandler);
+    }
+    function escHandler(e) { if (e.key === 'Escape') close(); }
+    document.addEventListener('keydown', escHandler);
+
+    const listHost = h('div', { class: 'github-pickrepos-list',
+      style: { maxHeight: '50vh', overflowY: 'auto' } },
+      h('span', { class: 'muted' }, t('github.loading')));
+    const searchInput = h('input', {
+      type: 'search', class: 'github-repos-input',
+      style: { width: '100%' },
+      placeholder: t('github.picker.search'),
+      oninput: () => refilter(),
+    });
+    const manualInput = h('input', {
       type: 'text', class: 'github-repos-input',
       placeholder: 'owner/repo',
-    });
-    const addBtn = h('button', {
-      class: 'btn btn-inline btn-primary',
-      onclick: async () => {
-        const v = (input.value || '').trim();
-        if (!v) return;
-        if (!/^[^\s/]+\/[^\s/]+$/.test(v)) {
-          showToast('error', t('github.repos.bad-format'));
-          return;
+      onkeydown: (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          tryManualAdd();
         }
-        if (repos.includes(v)) {
-          showToast('warn', `already added: ${v}`);
-          return;
-        }
-        repos.push(v);
-        input.value = '';
-        await save(repos);
-        paintRows();
       },
-    }, t('github.repos.add'));
+    });
+    const manualBtn = h('button', {
+      type: 'button', class: 'btn btn-inline',
+      onclick: () => tryManualAdd(),
+    }, t('github.picker.add-manual'));
+    async function tryManualAdd() {
+      const ok = await onPick((manualInput.value || '').trim());
+      if (ok) close();
+    }
+    let allRepos = [];
+    function refilter() {
+      const q = (searchInput.value || '').toLowerCase().trim();
+      const rows = allRepos
+        .filter(r => !q
+                  || r.slug.toLowerCase().includes(q)
+                  || (r.description || '').toLowerCase().includes(q))
+        .slice(0, 200)
+        .map(r => h('div', {
+          class: 'github-pickrepos-row'
+                  + (r.already_added ? ' disabled' : ''),
+          style: r.already_added ? { opacity: '0.5' } : {},
+          onclick: async () => {
+            if (r.already_added) return;
+            const ok = await onPick(r.slug);
+            if (ok) close();
+          },
+        },
+          h('div', { style: { flex: '1', minWidth: '0' } },
+            h('strong', {}, r.slug),
+            r.private ? h('span', { class: 'pill',
+              style: { marginLeft: '0.4rem', fontSize: '10px' } },
+              'private') : null,
+            r.fork ? h('span', { class: 'pill',
+              style: { marginLeft: '0.3rem', fontSize: '10px' } },
+              'fork') : null,
+            r.archived ? h('span', { class: 'pill behind',
+              style: { marginLeft: '0.3rem', fontSize: '10px' } },
+              'archived') : null,
+            r.description ? h('div', { class: 'muted',
+              style: { fontSize: '11px', marginTop: '2px',
+                        overflow: 'hidden', textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap' } }, r.description) : null,
+          ),
+          r.already_added
+            ? h('span', { class: 'muted', style: { fontSize: '11px' } },
+                t('github.picker.already-added'))
+            : h('span', { class: 'pill clean', style: { fontSize: '11px' } },
+                t('github.picker.click-to-add')),
+        ));
+      if (!rows.length) {
+        listHost.replaceChildren(h('div', { class: 'muted',
+          style: { padding: '0.6rem' } },
+          q ? t('github.picker.no-matches', { q })
+            : t('github.picker.empty')));
+        return;
+      }
+      listHost.replaceChildren(...rows);
+    }
 
-    host.replaceChildren(rowsHost,
-      h('div', { class: 'github-repos-add' }, input, addBtn));
+    const modal = h('div', { class: 'logs-modal',
+      style: { maxWidth: '560px', height: 'auto', alignSelf: 'flex-start' },
+      role: 'dialog', onclick: (e) => e.stopPropagation() },
+      h('div', { class: 'logs-modal-head' },
+        h('strong', {}, t('github.picker.title')),
+        h('span', { style: { flex: '1' } }),
+        h('button', { type: 'button', class: 'btn btn-inline',
+                       onclick: close }, t('github.close')),
+      ),
+      h('div', { style: { padding: '0.6rem 0.8rem',
+                            display: 'flex', flexDirection: 'column',
+                            gap: '0.5rem' } },
+        searchInput,
+        listHost,
+        h('div', { class: 'profile-help',
+                     style: { paddingTop: '0.3rem' } },
+          t('github.picker.manual-fallback')),
+        h('div', { style: { display: 'flex', gap: '0.4rem' } },
+          manualInput, manualBtn)),
+    );
+    backdrop.append(modal);
+    document.body.append(backdrop);
+
+    fetch('/api/github/available-repos', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(d => {
+        if (d.error && !(d.repos || []).length) {
+          listHost.replaceChildren(h('div', { class: 'pill behind',
+            style: { padding: '0.4rem 0.6rem' } }, d.error));
+          return;
+        }
+        allRepos = d.repos || [];
+        refilter();
+      })
+      .catch(err => {
+        listHost.replaceChildren(h('div', { class: 'pill behind',
+          style: { padding: '0.4rem 0.6rem' } }, String(err)));
+      });
   }
 
   // Agent-CLI provider picker. Reads /api/providers for the installed
@@ -2273,25 +2428,109 @@
   // (`agent-model.<provider-id>`) so switching the active CLI
   // restores that CLI's last-chosen model independently.
   function buildProfileModelPanel(activeProvider) {
-    // Show one section per installed provider that exposes a priced
-    // model list. Lets the user set each CLI's default model
-    // independently — the active provider's pick is what gets passed
-    // as --model on launch, but the user can preconfigure all of
-    // them at once. Claude Code gets its hand-curated multi-line
-    // layout; other providers get a bare radio list.
+    // Sub-tab bar: one tab per installed provider that exposes a
+    // priced model list, plus a final "General Agent" tab for the
+    // pinned __agent__ override (its own CLI + that CLI's model).
+    // Scales as new providers come online.
     const providers = (window.__providersCache || [])
       .filter(p => p.installed && (p.models || []).length > 0);
-    const sections = providers.map(p => buildOneProviderModelSection(p));
-    if (!sections.length) {
+    if (!providers.length) {
       return h('div', { class: 'profile-tab-content profile-help' },
         'No installed provider exposes a priced model list yet.');
     }
-    // Tail note pointing at the per-provider override above + the
-    // workspace-level Model column in the 🐙 GitHub modal.
-    sections.push(h('div', { class: 'profile-help',
-                              style: { marginTop: '0.8rem' } },
-      t('profile.help.model')));
-    return h('div', { class: 'profile-tab-content' }, ...sections);
+    const subtabs = [
+      ...providers.map(p => ({
+        id: p.id, label: p.display_name,
+        build: () => buildOneProviderModelSection(p),
+      })),
+      { id: '__general__',
+        label: t('profile.model.subtab.general-agent'),
+        build: () => buildGeneralAgentModelSubtab() },
+    ];
+    let active = localStorage.getItem('profile-model-subtab') || '';
+    if (!subtabs.some(s => s.id === active)) active = subtabs[0].id;
+
+    const contentHost = h('div', { class: 'profile-subsection' });
+    const subBar = h('div', { class: 'profile-subtabbar' });
+    function paintActive() {
+      subBar.querySelectorAll('.profile-subtab').forEach(b =>
+        b.classList.toggle('active', b.dataset.subtab === active));
+      const s = subtabs.find(x => x.id === active) || subtabs[0];
+      contentHost.replaceChildren(s.build());
+    }
+    subBar.replaceChildren(...subtabs.map(s => h('button', {
+      type: 'button',
+      class: 'profile-subtab' + (s.id === active ? ' active' : ''),
+      'data-subtab': s.id,
+      onclick: () => {
+        active = s.id;
+        localStorage.setItem('profile-model-subtab', s.id);
+        paintActive();
+      },
+    }, s.label)));
+    paintActive();
+    return h('div', { class: 'profile-tab-content' },
+      subBar,
+      contentHost,
+      h('div', { class: 'profile-help', style: { marginTop: '0.6rem' } },
+        t('profile.help.model')),
+    );
+  }
+
+  // General Agent sub-tab — picks the CLI (with "Inherit default"
+  // first) and shows that CLI's model picker below. Replaces the
+  // GENERAL AGENT MODEL section that used to live on the Claude
+  // sub-tab so the override stops being Claude-specific.
+  function buildGeneralAgentModelSubtab() {
+    const providers = window.__providersCache || [];
+    const installed = providers.filter(p => p.installed);
+    const currentCli = (prefs.getItem('general-agent-provider') || '').trim();
+    const defaultCli = (prefs.getItem('default-provider') || 'claude').trim();
+    const effectiveCli = currentCli || defaultCli;
+    const effectiveProvider = providers.find(p => p.id === effectiveCli);
+
+    function cliRow(id, label, sublabel) {
+      const checked = (id || '') === currentCli;
+      return h('label', {
+        class: 'agent-provider-row' + (checked ? ' active' : ''),
+        title: sublabel || '',
+      },
+        h('input', {
+          type: 'radio', name: 'general-agent-cli',
+          value: id || '',
+          checked: checked ? '' : null,
+          onchange: () => setGeneralAgentProvider(id || ''),
+        }),
+        h('div', { class: 'agent-provider-body' },
+          h('div', { class: 'agent-provider-head' },
+            h('strong', {}, label),
+            sublabel
+              ? h('span', { class: 'muted' }, ' · ', sublabel)
+              : null,
+          ),
+        ),
+      );
+    }
+    const cliRows = [
+      cliRow('', t('profile.agent.general.inherit'),
+              t('profile.agent.general.inherit-tip', { id: defaultCli })),
+      ...installed.map(p => cliRow(p.id, p.display_name, p.binary)),
+    ];
+
+    return h('div', {},
+      h('div', { class: 'profile-section' },
+        h('div', { class: 'profile-group' },
+          h('div', { class: 'profile-section-title' },
+            t('profile.model.general.cli')),
+          h('div', { class: 'profile-row profile-row-stacked' },
+            h('div', { class: 'agent-provider-list' }, ...cliRows),
+          ),
+        ),
+      ),
+      effectiveProvider && (effectiveProvider.models || []).length
+        ? buildOneProviderModelSection(effectiveProvider)
+        : null,
+    );
   }
 
   function buildOneProviderModelSection(provider) {
@@ -2363,15 +2602,6 @@
   // hand-curated radio list with recommended flags is worth more
   // than the bare-keys list other providers fall back to.
   function buildProfileClaudeModelPanel() {
-    // General Agent override: choices = CLAUDE_MODEL_CHOICES + a
-    // synthetic "Inherit default" row that maps to the empty pref.
-    const gaCurrent = prefs.getItem('general-agent-model') || '';
-    const gaChoices = [
-      { id: '', short: 'Inherit default',
-        summary: `Uses the default above (${claudeModelLabel(claudeModelPref)})`,
-        tagline: 'No --model flag from the General Agent specifically' },
-      ...CLAUDE_MODEL_CHOICES,
-    ];
     const mkRadioRow = (name, choice, checked, onSelect) => {
       const radio = h('input', {
         type: 'radio', name, value: choice.id,
@@ -2393,43 +2623,24 @@
         ),
       );
     };
-    return h('div', { class: 'profile-tab-content' },
-      h('div', { class: 'profile-section' },
-        // Global default — applied to every per-issue Agent unless
-        // a per-issue override is set.
-        h('div', { class: 'profile-group' },
-          h('div', { class: 'profile-section-title' },
-            t('profile.label.claude-model')),
-          h('div', { class: 'profile-row profile-row-stacked' },
-            h('div', { class: 'claude-model-options' },
-              ...CLAUDE_MODEL_CHOICES.map(c =>
-                mkRadioRow('claude-model-pref', c,
-                            claudeModelPref === c.id, (id) => {
-                  claudeModelPref = id;
-                  localStorage.setItem('claude-model-pref', id);
-                })),
-            ),
+    // The Claude sub-tab now hosts only the default-provider model
+    // pick. General Agent's CLI + model override lives on its own
+    // sub-tab so each provider's section stays focused.
+    return h('div', { class: 'profile-section' },
+      h('div', { class: 'profile-group' },
+        h('div', { class: 'profile-section-title' },
+          t('profile.label.claude-model')),
+        h('div', { class: 'profile-row profile-row-stacked' },
+          h('div', { class: 'claude-model-options' },
+            ...CLAUDE_MODEL_CHOICES.map(c =>
+              mkRadioRow('claude-model-pref', c,
+                          claudeModelPref === c.id, (id) => {
+                claudeModelPref = id;
+                localStorage.setItem('claude-model-pref', id);
+              })),
           ),
-          h('div', { class: 'profile-help' }, t('profile.help.claude-model')),
         ),
-        // General Agent override — separate from the per-issue
-        // overrides because the General Agent has no issue picker.
-        h('div', { class: 'profile-group' },
-          h('div', { class: 'profile-section-title' },
-            t('profile.label.general-agent-model')),
-          h('div', { class: 'profile-row profile-row-stacked' },
-            h('div', { class: 'claude-model-options' },
-              ...gaChoices.map(c =>
-                mkRadioRow('general-agent-model', c,
-                            gaCurrent === c.id, (id) => {
-                  if (id) prefs.setItem('general-agent-model', id);
-                  else prefs.removeItem('general-agent-model');
-                })),
-            ),
-          ),
-          h('div', { class: 'profile-help' },
-            t('profile.help.general-agent-model')),
-        ),
+        h('div', { class: 'profile-help' }, t('profile.help.claude-model')),
       ),
     );
   }

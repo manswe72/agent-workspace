@@ -456,3 +456,50 @@ def is_configured() -> bool:
 
 def has_token() -> bool:
     return bool(_resolve_token())
+
+
+# ── Repo picker (Profile → GitHub repos editor) ────────────────────────
+_AVAILABLE_REPOS_CACHE: dict = {"repos": [], "ts": 0.0, "err": None}
+
+
+def fetch_available_repos(force: bool = False) -> tuple[list[dict], str | None]:
+    """Every repo the authenticated user can access — owned, org-member,
+    or collaborator — for the Profile picker. Sorted by recent push so
+    the most-likely candidates float to the top. 5-minute cache. Needs
+    a token (anonymous `/user/repos` returns 401)."""
+    now = time.time()
+    if not force and _AVAILABLE_REPOS_CACHE["repos"] and \
+            (now - _AVAILABLE_REPOS_CACHE["ts"]) < _CACHE_TTL:
+        return _AVAILABLE_REPOS_CACHE["repos"], _AVAILABLE_REPOS_CACHE["err"]
+    token = _resolve_token()
+    if not token:
+        _AVAILABLE_REPOS_CACHE.update(
+            repos=[], err="GITHUB_TOKEN required to list repos", ts=now)
+        return [], _AVAILABLE_REPOS_CACHE["err"]
+    out: list[dict] = []
+    err: str | None = None
+    # Page through up to 5 pages (500 repos) — anything beyond that is
+    # very rare for a single user and the picker should not be a
+    # comprehensive directory browser.
+    for page in range(1, 6):
+        data, e = _request(
+            f"{_API_BASE}/user/repos?per_page=100&sort=pushed&page={page}",
+            token)
+        if e:
+            err = e
+            break
+        if not isinstance(data, list) or not data:
+            break
+        for r in data:
+            out.append({
+                "slug": r.get("full_name") or "",
+                "private": bool(r.get("private")),
+                "fork": bool(r.get("fork")),
+                "archived": bool(r.get("archived")),
+                "description": r.get("description") or "",
+                "pushed_at": r.get("pushed_at") or "",
+            })
+        if len(data) < 100:
+            break
+    _AVAILABLE_REPOS_CACHE.update(repos=out, err=err, ts=now)
+    return out, err
