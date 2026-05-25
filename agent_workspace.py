@@ -282,6 +282,70 @@ def install_global_git_credentials_env() -> None:
             os.environ.pop(k, None)
 
 
+# Other CLIs' per-cwd briefing filenames pointed at AGENTS.md. AGENTS.md
+# is Codex CLI's native convention; the rest of the supported CLIs each
+# look for a different filename, so symlinking is the cheapest way to
+# share one source of truth.
+#   Claude Code → CLAUDE.md
+#   Gemini CLI  → GEMINI.md
+#   Cursor      → .cursorrules
+_BRIEFING_SYMLINK_NAMES = ("CLAUDE.md", "GEMINI.md", ".cursorrules")
+
+
+def ensure_shared_agent_briefing(worktrees_root: Path) -> None:
+    """Make sure every supported coding-agent CLI loads the same
+    AGENTS.md when it starts in a worktree under <worktrees_root>.
+
+    - Copy `templates/worktrees-AGENTS.md` to `<root>/AGENTS.md` if
+      the file is missing (idempotent).
+    - For each non-Codex CLI's expected briefing filename, create a
+      relative symlink to AGENTS.md (also idempotent). An existing
+      regular file with that name is left alone — the user may have
+      hand-edited a CLI-specific brief and we don't want to clobber
+      their work.
+
+    Best-effort: a failure here is logged and the dashboard keeps
+    starting. Without the symlinks, Codex sessions still see the
+    briefing; only the other CLIs would start without it."""
+    try:
+        worktrees_root.mkdir(parents=True, exist_ok=True)
+    except OSError as ex:
+        log_event("warn", "briefing",
+                  "could not create worktrees root", error=str(ex))
+        return
+    target = worktrees_root / "AGENTS.md"
+    template = REPO_DIR / "templates" / "worktrees-AGENTS.md"
+    if not target.exists() and template.is_file():
+        try:
+            target.write_text(template.read_text())
+        except OSError as ex:
+            log_event("warn", "briefing",
+                      "could not install AGENTS.md from template",
+                      error=str(ex))
+            return
+    if not target.is_file():
+        return
+    for name in _BRIEFING_SYMLINK_NAMES:
+        link = worktrees_root / name
+        try:
+            # Already correct → done. Use lexists so a dangling
+            # symlink (target.exists() = False) still trips the
+            # branch and gets rebuilt.
+            if link.is_symlink() and os.readlink(link) == "AGENTS.md":
+                continue
+            if link.exists() and not link.is_symlink():
+                # Regular file present — leave the user's hand-edited
+                # CLI-specific brief alone.
+                continue
+            if link.is_symlink():
+                link.unlink()
+            link.symlink_to("AGENTS.md")
+        except OSError as ex:
+            log_event("warn", "briefing",
+                      "could not install briefing symlink",
+                      name=name, error=str(ex))
+
+
 def github_clone_url_for(user_slug: str, repo_name: str) -> str | None:
     """If the user's github-repos list contains an entry whose tail
     matches `repo_name`, return the HTTPS clone URL for it. Falls back
@@ -7489,6 +7553,17 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as ex:  # noqa: BLE001
         log_event("warn", "startup",
                   "could not install git credentials env",
+                  error=str(ex))
+
+    # Make sure every supported CLI sees the shared AGENTS.md briefing.
+    # AGENTS.md is Codex CLI's native convention; we install symlinks
+    # for CLAUDE.md / GEMINI.md / .cursorrules so the other CLIs auto-
+    # load the same file.
+    try:
+        ensure_shared_agent_briefing(args.worktrees)
+    except Exception as ex:  # noqa: BLE001
+        log_event("warn", "startup",
+                  "could not install shared agent briefing",
                   error=str(ex))
 
     # Hydrate SQLite from data/*.jsonl on startup so a freshly-cloned repo
