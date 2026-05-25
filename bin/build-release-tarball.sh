@@ -51,7 +51,6 @@ mkdir -p dist
 # a one-line edit. Order doesn't matter (tar sorts internally).
 FILES=(
   agent_workspace.py
-  iip.py
   awlib
   static
   templates
