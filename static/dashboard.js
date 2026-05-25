@@ -617,6 +617,7 @@
       'stat.behind':            'Branches >{n} behind',
       // Profile popover
       'profile.tab.dashboard':  'Dashboard',
+      'profile.tab.github':     'GitHub',
       'profile.tab.agent':      'Agent CLI',
       'profile.agent.intro':    'Which coding-agent CLI the 🤖 Agent button launches. The provider must be installed on PATH — disabled rows have no binary detected.',
       'profile.agent.installed':'installed',
@@ -736,6 +737,16 @@
       'mcp.kind.review_response':    'review response',
       'profile.label.github-repos':  'GitHub repos',
       'profile.help.github-repos':   'Repositories the dashboard tracks. Each entry is "owner/repo". Drives the issue/PR list, the per-workspace pill, and the default repo set when adding a new workspace.',
+      'profile.label.github-token':  'API key (PAT)',
+      'profile.help.github-token':   'Personal Access Token used for every GitHub API call and for git fetch/push from the dashboard and the agents. Stored at ~/.config/agent-workspace/github-token (chmod 600). Required scopes: Contents Read, Pull requests Read, Issues Write.',
+      'profile.github-token.set':    'set ✓',
+      'profile.github-token.unset':  'not set',
+      'profile.github-token.save':   'Save',
+      'profile.github-token.clear':  'Clear',
+      'profile.github-token.placeholder':'ghp_… or github_pat_…',
+      'profile.github-token.toast.saved':'token saved',
+      'profile.github-token.toast.cleared':'token cleared',
+      'profile.github-token.toast.err':'save failed: {error}',
       'profile.label.pr-poll':            'PR event polling',
       'profile.label.pr-poll.toggle':    ' Notify me when a tracked PR changes state',
       'profile.label.pr-poll.interval':  'Poll interval',
@@ -1159,6 +1170,7 @@
       'stat.unpushed':          'Opushade commits',
       'stat.behind':            'Brancher >{n} efter',
       'profile.tab.dashboard':  'Dashboard',
+      'profile.tab.github':     'GitHub',
       'profile.tab.agent':      'Agent-CLI',
       'profile.agent.intro':    'Vilket coding-agent-CLI som 🤖 Agent-knappen startar. Verktyget måste finnas på PATH — gråa rader saknar binär.',
       'profile.agent.installed':'installerad',
@@ -1280,6 +1292,16 @@
       'mcp.kind.review_response':    'granskningssvar',
       'profile.label.github-repos':  'GitHub-repon',
       'profile.help.github-repos':   'Repositorier dashboarden följer. Varje rad är "owner/repo". Styr issue/PR-listan, per-workspace-pillet och repo-urvalet när en ny workspace skapas.',
+      'profile.label.github-token':  'API-nyckel (PAT)',
+      'profile.help.github-token':   'Personal Access Token som används vid varje GitHub API-anrop och vid git fetch/push från dashboarden och agenterna. Lagras i ~/.config/agent-workspace/github-token (chmod 600). Krav på scopes: Contents Read, Pull requests Read, Issues Write.',
+      'profile.github-token.set':    'satt ✓',
+      'profile.github-token.unset':  'inte satt',
+      'profile.github-token.save':   'Spara',
+      'profile.github-token.clear':  'Rensa',
+      'profile.github-token.placeholder':'ghp_… eller github_pat_…',
+      'profile.github-token.toast.saved':'token sparad',
+      'profile.github-token.toast.cleared':'token rensad',
+      'profile.github-token.toast.err':'kunde inte spara: {error}',
       'profile.label.pr-poll':            'PR-händelser',
       'profile.label.pr-poll.toggle':    ' Notifiera när en följd PR ändrar status',
       'profile.label.pr-poll.interval':  'Pollintervall',
@@ -2001,17 +2023,116 @@
           h('div', { class: 'profile-help' },
             t('profile.help.mailbox-auto-poll')),
         ),
+      ),
+    );
+  }
+
+  function githubPrPollOn() {
+    const v = prefs.getItem('github-pr-poll-enabled');
+    return v === '1' || v === 'true';
+  }
+
+  // Profile → GitHub tab. Three sections: the API key (PAT) input,
+  // the tracked-repos editor, and the PR-poll toggle / interval. All
+  // three used to live on the Dashboard tab; pulling them out into
+  // a dedicated tab keeps Dashboard focused on UI prefs and gives
+  // the PAT enough room for a real help block.
+  function buildProfileGithubPanel() {
+    // PAT card. Token state is fetched async via /api/github/token —
+    // we show "(loading…)" until the response comes back. The
+    // <input> is type=password so eyeballs over your shoulder can't
+    // peek; a "show" toggle would be nice but isn't critical here.
+    const tokenInput = h('input', {
+      type: 'password',
+      class: 'profile-input github-pat-input',
+      placeholder: t('profile.github-token.placeholder'),
+      autocomplete: 'off',
+      spellcheck: 'false',
+      style: { width: '100%', maxWidth: '420px',
+                fontFamily: 'monospace' },
+    });
+    const tokenStatus = h('span', { class: 'muted',
+      id: 'github-token-status' }, '…');
+    const saveTokenBtn = h('button', {
+      type: 'button', class: 'btn btn-inline btn-primary',
+      onclick: async () => {
+        const v = tokenInput.value.trim();
+        if (!v) {
+          showToast('warn', t('profile.github-token.placeholder'));
+          tokenInput.focus();
+          return;
+        }
+        try {
+          const r = await fetch('/api/github/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: v }),
+          });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(d.error || `status ${r.status}`);
+          showToast('ok', t('profile.github-token.toast.saved'));
+          tokenInput.value = '';
+          refreshTokenStatus();
+          // PR poll thread + GitHub modal both need fresh data now
+          // that the token may have changed.
+          refreshAll(true);
+        } catch (err) {
+          showToast('error', t('profile.github-token.toast.err',
+            { error: err.message || err }));
+        }
+      },
+    }, t('profile.github-token.save'));
+    const clearTokenBtn = h('button', {
+      type: 'button', class: 'btn btn-inline btn-danger',
+      onclick: async () => {
+        if (!window.confirm('Clear the stored GitHub token?')) return;
+        try {
+          const r = await fetch('/api/github/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ clear: true }),
+          });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(d.error || `status ${r.status}`);
+          showToast('ok', t('profile.github-token.toast.cleared'));
+          refreshTokenStatus();
+          refreshAll(true);
+        } catch (err) {
+          showToast('error', t('profile.github-token.toast.err',
+            { error: err.message || err }));
+        }
+      },
+    }, t('profile.github-token.clear'));
+
+    return h('div', { class: 'profile-tab-content' },
+      h('div', { class: 'profile-section' },
+        h('div', { class: 'profile-group' },
+          h('div', { class: 'profile-row' },
+            h('span', { class: 'profile-row-label' },
+              t('profile.label.github-token')),
+            tokenStatus,
+          ),
+          h('div', { class: 'profile-help' },
+            t('profile.help.github-token')),
+          h('div', { class: 'profile-row',
+                       style: { gap: '0.4rem', flexWrap: 'wrap' } },
+            tokenInput, saveTokenBtn, clearTokenBtn,
+          ),
+        ),
         h('div', { class: 'profile-group' },
           h('div', { class: 'profile-row' },
             h('span', { class: 'profile-row-label' },
               t('profile.label.github-repos')),
-            h('div', { class: 'github-repos-editor', id: 'github-repos-editor' },
-              h('span', { class: 'muted' }, t('github.loading'))),
+            h('div', {
+              class: 'github-repos-editor',
+              id: 'github-repos-editor',
+            }, h('span', { class: 'muted' }, t('github.loading'))),
           ),
           h('div', { class: 'profile-help' },
             t('profile.help.github-repos')),
-          h('div', { class: 'profile-row',
-                       style: { marginTop: '0.6rem' } },
+        ),
+        h('div', { class: 'profile-group' },
+          h('div', { class: 'profile-row' },
             h('span', { class: 'profile-row-label' },
               t('profile.label.pr-poll')),
             h('label', { class: 'profile-toggle' },
@@ -2020,7 +2141,8 @@
                 checked: githubPrPollOn() ? '' : null,
                 onchange: (e) => {
                   const on = !!e.target.checked;
-                  prefs.setItem('github-pr-poll-enabled', on ? '1' : '0');
+                  prefs.setItem('github-pr-poll-enabled',
+                    on ? '1' : '0');
                   fetch('/api/preferences', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -2063,9 +2185,22 @@
     );
   }
 
-  function githubPrPollOn() {
-    const v = prefs.getItem('github-pr-poll-enabled');
-    return v === '1' || v === 'true';
+  // Async fetch of the stored-token state. The label updates the
+  // span without re-rendering the whole panel.
+  async function refreshTokenStatus() {
+    const el = document.getElementById('github-token-status');
+    if (!el) return;
+    try {
+      const r = await fetch('/api/github/token', { cache: 'no-store' });
+      const d = await r.json();
+      el.textContent = d.has_token
+        ? t('profile.github-token.set') +
+            (d.login ? ` · ${d.login}` : '')
+        : t('profile.github-token.unset');
+      el.classList.toggle('muted', !d.has_token);
+    } catch (_) {
+      el.textContent = t('profile.github-token.unset');
+    }
   }
 
   // GitHub repos editor — list-based UI for the `github-repos`
@@ -3476,8 +3611,11 @@
     const showModelTab = (activeProvider?.models?.length || 0) > 0;
     const tabs = [
       { id: 'dashboard',    label: t('profile.tab.dashboard'),
-        build: () => buildProfileDashboardPanel(meta, editors),
-        onShow: () => renderGithubReposEditor() },
+        build: () => buildProfileDashboardPanel(meta, editors) },
+      { id: 'github',       label: t('profile.tab.github'),
+        build: () => buildProfileGithubPanel(),
+        onShow: () => { renderGithubReposEditor();
+                        refreshTokenStatus(); } },
       { id: 'agent',        label: t('profile.tab.agent'),
         build: () => buildProfileAgentPanel() },
       ...(showModelTab ? [
@@ -9267,10 +9405,14 @@
     // ⤢ Fullscreen — toggle a "agent-fullscreen" class on the panel
     // so the inline terminal expands to fill the viewport. Lives in
     // the issue-head so it stays reachable when the agent panel is
-    // scrolled out of view. CSS picks the active-tint when
-    // `body.agent-fullscreen-active` is set.
+    // scrolled out of view. Class `agent-fullscreen-btn` (matched on
+    // `data-issue`) is shared with the in-controls duplicate so
+    // applyFullscreenClasses can flip both labels together. Text
+    // (not glyph-only) per the user's request — the icon-only chrome
+    // wasn't readable next to the Notes / Pin / Remove buttons.
     headChildren.push(h('button', {
-      class: 'btn fullscreen-tab-btn hover-popover-host',
+      class: 'btn fullscreen-tab-btn agent-fullscreen-btn '
+              + 'hover-popover-host',
       type: 'button',
       'aria-label': t('agent.controls.fullscreen-tip'),
       'data-issue': issueObj.issue,
@@ -9278,7 +9420,7 @@
         e.preventDefault();
         toggleAgentFullscreen(issueObj.issue);
       },
-    }, '⤢',
+    }, t('agent.controls.fullscreen'),
       h('div', { class: 'hover-popover' },
         h('div', { class: 'hover-popover-foot' },
           t('agent.controls.fullscreen-tip'))),
@@ -9734,21 +9876,26 @@
       onclick: () => toggleAgentSearch(issue),
     }, t('agent.controls.search'));
 
-    // ⤢ Fullscreen — for per-issue panels this lives in the issue-head
-    // row alongside Pin / Remove. The General Agent (Agent Engineering)
-    // tab has no issue-head row, so for that panel the button stays in
-    // the controls row, immediately to the right of the search icon
-    // where it used to live before the v2 layout.
-    const fullscreenInlineBtn = isGeneral ? h('button', {
-      class: 'btn btn-inline agent-fullscreen-btn',
+    // ⤢ Fullscreen — for the General Agent (no issue-head row) this
+    // button is the only entry point and is always visible. For per-
+    // issue panels the primary copy lives in the issue-head row next
+    // to Pin / Remove; we still emit a duplicate here so the user
+    // can EXIT fullscreen (the issue-head is covered by the position:
+    // fixed body-wrap in fullscreen mode). CSS keeps the per-issue
+    // copy hidden outside fullscreen — see `.agent-fullscreen-btn-
+    // controls` rule in dashboard.css.
+    const fullscreenInlineBtn = h('button', {
+      class: 'btn btn-inline agent-fullscreen-btn'
+              + (isGeneral ? '' : ' agent-fullscreen-btn-controls'),
       type: 'button',
       title: t('agent.controls.fullscreen-tip'),
       'aria-label': t('agent.controls.fullscreen-tip'),
+      'data-issue': issue,
       onclick: (e) => {
         e.preventDefault();
         toggleAgentFullscreen(issue);
       },
-    }, t('agent.controls.fullscreen')) : null;
+    }, t('agent.controls.fullscreen'));
 
     // ← → previous/next agent panel. The pinned General Agent tab
     // is part of the navigation ring too, so the user can flip
@@ -9794,11 +9941,11 @@
     );
     panel.append(controlsRow);
     panel._controlsRow = controlsRow;
-    // For per-issue panels the fullscreen affordance lives in the
-    // issue-head row (applyFullscreenClasses finds it by selector).
-    // For the General Agent panel it lives here in the controls row,
-    // so expose the local ref too.
-    if (fullscreenInlineBtn) panel._fullscreenBtn = fullscreenInlineBtn;
+    panel._issue = issue;
+    // Label-flipping is driven by `applyFullscreenClasses` walking
+    // every `.agent-fullscreen-btn[data-issue=X]` it can find — so
+    // both the issue-head copy and this controls-row copy stay in
+    // sync. No panel-local ref needed.
 
     // --- Terminal host (xterm.js attaches here when running) ---
     // CRITICAL: when an xterm is already running for this issue, we
@@ -10849,11 +10996,27 @@
     panel.classList.toggle('agent-fullscreen', on);
     const wrap = panel.closest('.issue-body-wrap');
     if (wrap) wrap.classList.toggle('agent-fullscreen', on);
-    const btn = panel._fullscreenBtn;
-    if (btn) {
-      btn.textContent = on
-        ? t('agent.controls.fullscreen-exit')
-        : t('agent.controls.fullscreen');
+    // Every fullscreen button for this issue (issue-head copy +
+    // controls-row copy) flips its label in sync. Identified by
+    // data-issue so a different issue's buttons aren't touched
+    // when the user navigates between worktrees in fullscreen.
+    const issue = panel._issue
+      || panel._controlsRow?.querySelector(
+            '.agent-fullscreen-btn[data-issue]')?.dataset.issue;
+    if (issue) {
+      document.querySelectorAll(
+        `.agent-fullscreen-btn[data-issue="${CSS.escape(issue)}"]`)
+        .forEach((b) => {
+          // Keep the trailing hover-popover child intact when we
+          // swap the text node — only the first text child changes.
+          const first = Array.from(b.childNodes).find(
+            n => n.nodeType === 3);
+          const label = on
+            ? t('agent.controls.fullscreen-exit')
+            : t('agent.controls.fullscreen');
+          if (first) first.nodeValue = label;
+          else b.prepend(document.createTextNode(label));
+        });
     }
   }
 
@@ -10865,7 +11028,12 @@
     document.querySelectorAll('.agent-fullscreen').forEach((el) =>
       el.classList.remove('agent-fullscreen'));
     document.querySelectorAll('.agent-fullscreen-btn').forEach((b) => {
-      b.textContent = t('agent.controls.fullscreen');
+      // Preserve the trailing hover-popover child if there is one
+      // (issue-head copy carries one for the tooltip on hover).
+      const first = Array.from(b.childNodes).find(n => n.nodeType === 3);
+      const label = t('agent.controls.fullscreen');
+      if (first) first.nodeValue = label;
+      else b.prepend(document.createTextNode(label));
     });
   }
 

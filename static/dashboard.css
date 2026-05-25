@@ -739,6 +739,20 @@ body { display: flex; flex-direction: column; min-height: 100vh; }
 }
 body.agent-fullscreen-active { overflow: hidden; }
 
+/* Per-issue Agent panels carry TWO fullscreen buttons: the primary
+   one lives in the issue-head row (visible in normal mode, but
+   covered by the position:fixed body-wrap in fullscreen), and a
+   duplicate one in the controls row (hidden in normal mode so it
+   doesn't clutter the toolbar, revealed only while fullscreen is
+   active so the user can exit). General Agent panels carry only
+   the controls-row copy (no issue-head exists) — that one omits
+   the `agent-fullscreen-btn-controls` class and stays visible
+   regardless. */
+.agent-fullscreen-btn-controls { display: none; }
+.agent-fullscreen .agent-fullscreen-btn-controls {
+  display: inline-flex;
+}
+
 /* Agent terminal search overlay ─────────────────────────────────────────
    Floats top-right of .agent-term-host (position:relative + overflow:hidden
    already set). z-index:10 lifts it above the xterm canvas layers. */

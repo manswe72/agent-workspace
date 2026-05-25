@@ -2984,11 +2984,20 @@ def create_issue_worktrees(worktrees_root: Path,
              "+refs/heads/*:refs/remotes/origin/*"],
             capture_output=True, text=True, timeout=10,
         )
-        # Best-effort fetch of the issue branch (ignored if missing on remote).
+        # Best-effort fetch of the issue branch AND the base branch.
+        # Without the base fetch the worktree would be created from a
+        # stale local copy of <base> — typically the primary's initial
+        # commit on a freshly-cloned repo — and the user would not see
+        # any of the recent main-branch work.
         subprocess.run(
             ["git", "-C", str(primary), "fetch", "origin", issue],
             capture_output=True, text=True, timeout=30,
         )
+        if base_branch:
+            subprocess.run(
+                ["git", "-C", str(primary), "fetch", "origin", base_branch],
+                capture_output=True, text=True, timeout=30,
+            )
         # Does origin/<issue> exist now?
         check_remote = subprocess.run(
             ["git", "-C", str(primary), "rev-parse", "--verify",
@@ -3043,17 +3052,18 @@ def create_issue_worktrees(worktrees_root: Path,
                     if fallback not in candidates:
                         candidates.append(fallback)
                 allow_fallback = True
+            # Prefer the freshly-fetched origin/<base> over the local
+            # copy — the local branch may be stale (e.g. a primary
+            # cloned ages ago, never `git pull`-ed). The user said
+            # "use the latest from the branch you specify", so the
+            # remote tip is authoritative when we can reach the
+            # remote. Fall back to local only if origin/<base> isn't
+            # available (rare — usually means base_branch is a name
+            # only known locally).
             base_ref = None
             tried: list[str] = []
             for cand in candidates:
                 tried.append(cand)
-                ok_local = subprocess.run(
-                    ["git", "-C", str(primary), "rev-parse", "--verify", cand],
-                    capture_output=True, text=True, timeout=10,
-                ).returncode == 0
-                if ok_local:
-                    base_ref = cand
-                    break
                 ok_origin = subprocess.run(
                     ["git", "-C", str(primary), "rev-parse", "--verify",
                      f"refs/remotes/origin/{cand}"],
@@ -3061,6 +3071,13 @@ def create_issue_worktrees(worktrees_root: Path,
                 ).returncode == 0
                 if ok_origin:
                     base_ref = f"origin/{cand}"
+                    break
+                ok_local = subprocess.run(
+                    ["git", "-C", str(primary), "rev-parse", "--verify", cand],
+                    capture_output=True, text=True, timeout=10,
+                ).returncode == 0
+                if ok_local:
+                    base_ref = cand
                     break
                 if not allow_fallback:
                     break
@@ -5131,6 +5148,27 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                     "repos": _github.configured_repos(),
                 })
 
+            elif path == "/api/github/token":
+                # Status of the stored Personal Access Token. The
+                # token itself is NEVER returned — just whether one
+                # is on disk and (best-effort) the user it resolves
+                # to so the dashboard can show "logged in as X".
+                from awlib import github as _gh
+                tok = _gh._resolve_token()
+                login = None
+                if tok:
+                    try:
+                        login = _gh.fetch_authenticated_login() \
+                            if hasattr(_gh, "fetch_authenticated_login") \
+                            else None
+                    except Exception:  # noqa: BLE001
+                        login = None
+                self._send_json(200, {
+                    "has_token": bool(tok),
+                    "login": login,
+                    "path": str(_gh._TOKEN_FILE),
+                })
+
             elif path == "/api/github/issues/unassigned":
                 force = qs.get("force", ["0"])[0] in ("1", "true", "yes")
                 items, err = _github.fetch_unassigned_issues(force=force)
@@ -5285,6 +5323,52 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                 self._do_git_op(op, qs)
             elif parsed.path == "/api/issue/create":
                 self._do_create_issue()
+            elif parsed.path == "/api/github/token":
+                # Body: {"token": "<PAT>"} sets, {"token": ""}
+                # / {"clear": true} clears. Token is written to
+                # ~/.config/agent-workspace/github-token at chmod 600.
+                # Re-runs install_global_git_credentials_env so the
+                # dashboard's own subprocess env picks up the change
+                # without a restart.
+                body = self._read_json_body() or {}
+                from awlib import github as _gh
+                clear = bool(body.get("clear"))
+                tok = (body.get("token") or "").strip()
+                p = _gh._TOKEN_FILE
+                try:
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                except OSError as ex:
+                    self._send_json(500, {
+                        "error": f"could not create token dir: {ex}"})
+                    return
+                if clear or not tok:
+                    try:
+                        if p.exists():
+                            p.unlink()
+                    except OSError as ex:
+                        self._send_json(500, {
+                            "error": f"could not remove token: {ex}"})
+                        return
+                else:
+                    if not re.match(r"^[A-Za-z0-9_\-]{20,}$", tok):
+                        self._send_json(400, {
+                            "error": "token doesn't look like a PAT"
+                                     " (expected ≥20 chars of "
+                                     "[A-Za-z0-9_-])"})
+                        return
+                    try:
+                        p.write_text(tok)
+                        os.chmod(p, 0o600)
+                    except OSError as ex:
+                        self._send_json(500, {
+                            "error": f"could not write token: {ex}"})
+                        return
+                install_global_git_credentials_env()
+                self._send_json(200, {
+                    "has_token": p.is_file(),
+                    "path": str(p),
+                })
+
             elif parsed.path == "/api/github/assign":
                 # Body: {"repo": "owner/repo", "number": <int>}
                 # Assigns the issue to the authenticated user.
