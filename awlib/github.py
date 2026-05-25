@@ -124,8 +124,12 @@ def _gh_cli_list_prs(repo: str) -> list[dict] | None:
     fields = "number,title,state,url,headRefName,isDraft,updatedAt,author"
     try:
         r = subprocess.run(
+            # No author filter — list every open PR in the repo so the
+            # dashboard surface matches the "My GitHub issues" modal's
+            # broader scope. Users care about PRs they need to review
+            # or are watching, not just ones they opened themselves.
             ["gh", "pr", "list", "--repo", repo,
-             "--search", "is:open author:@me",
+             "--search", "is:open",
              "--json", fields, "--limit", "100"],
             capture_output=True, text=True, timeout=10, check=False,
         )
@@ -144,6 +148,9 @@ def _gh_cli_list_prs(repo: str) -> list[dict] | None:
 # ── REST PR list ────────────────────────────────────────────────────────
 
 def _rest_list_prs(repo: str) -> tuple[list[dict] | None, str | None]:
+    """Every open PR in the repo. Used to be filtered to author=me;
+    matches the "My GitHub issues" modal's broader view now (which
+    includes PRs you may want to review even if you didn't open them)."""
     token = _resolve_token()
     data, err = _request(
         f"{_API_BASE}/repos/{repo}/pulls?state=open&per_page=100", token)
@@ -151,12 +158,9 @@ def _rest_list_prs(repo: str) -> tuple[list[dict] | None, str | None]:
         return None, err
     if not isinstance(data, list):
         return None, "unexpected response shape"
-    author_filter = _whoami(token) if token else None
     out: list[dict] = []
     for pr in data:
         login = ((pr.get("user") or {}).get("login")) or ""
-        if author_filter and login != author_filter:
-            continue
         out.append({
             "repo": repo,
             "number": pr.get("number"),
@@ -320,6 +324,130 @@ def issue_for_workspace(workspace: str) -> dict | None:
         if found is not None:
             return found
     return None
+
+
+# ── PR event polling ────────────────────────────────────────────────────
+#
+# We don't have webhooks (no public URL), so the dashboard polls each
+# tracked PR for the four event surfaces the user cares about:
+#   - issue events  (review_requested, closed, merged, ready_for_review)
+#   - PR reviews    (approved, changes_requested, commented)
+#   - PR comments   (issue-level comments on the PR thread)
+# A single poll cycle issues 3 GET calls per PR. With the default 5 min
+# interval that's well under the 5000 req/hr authenticated quota.
+
+_PR_EVENT_ACTIONABLE_KINDS = {
+    "review_requested",
+    "review_request_removed",
+    "closed",
+    "reopened",
+    "merged",
+    "ready_for_review",
+}
+
+
+def fetch_pr_events(repo: str, pr_number: int) -> tuple[list[dict], str | None]:
+    """Return (events, err). Each event is a normalised dict with:
+       event_id   — GitHub's numeric id (PK across all 3 endpoints below)
+       kind       — short tag like 'github_pr_review_requested',
+                    'github_pr_review_approved', 'github_pr_comment'
+       actor      — login of who triggered it
+       created_at — ISO-8601 timestamp
+       message    — short human-readable summary
+       pr_number  — int
+       repo       — "owner/repo"
+    Best-effort: a network blip yields ([], err). The caller decides
+    whether to back off.
+    """
+    out: list[dict] = []
+    errs: list[str] = []
+    token = _resolve_token()
+
+    def _actor(d):
+        u = d.get("user") or d.get("actor") or {}
+        return u.get("login") or ""
+
+    # 1. Issue events — review_requested, closed, merged, etc.
+    data, err = _request(
+        f"{_API_BASE}/repos/{repo}/issues/{pr_number}/events", token)
+    if err:
+        errs.append(f"events: {err}")
+    elif isinstance(data, list):
+        for e in data:
+            kind = (e.get("event") or "").lower()
+            if kind not in _PR_EVENT_ACTIONABLE_KINDS:
+                continue
+            eid = e.get("id")
+            if eid is None:
+                continue
+            actor = _actor(e)
+            msg = f"PR #{pr_number}: {kind.replace('_', ' ')}"
+            if actor:
+                msg += f" by @{actor}"
+            out.append({
+                "event_id": int(eid),
+                "repo": repo, "pr_number": pr_number,
+                "kind": f"github_pr_{kind}",
+                "actor": actor,
+                "created_at": e.get("created_at") or "",
+                "message": msg,
+            })
+
+    # 2. PR reviews — approved / changes_requested / commented
+    data, err = _request(
+        f"{_API_BASE}/repos/{repo}/pulls/{pr_number}/reviews", token)
+    if err:
+        errs.append(f"reviews: {err}")
+    elif isinstance(data, list):
+        for r in data:
+            state = (r.get("state") or "").lower()
+            if state not in ("approved", "changes_requested", "commented"):
+                continue
+            rid = r.get("id")
+            if rid is None:
+                continue
+            actor = _actor(r)
+            human = state.replace("_", " ")
+            msg = f"PR #{pr_number}: review {human}"
+            if actor:
+                msg += f" by @{actor}"
+            out.append({
+                "event_id": int(rid),
+                "repo": repo, "pr_number": pr_number,
+                "kind": f"github_pr_review_{state}",
+                "actor": actor,
+                "created_at": r.get("submitted_at") or r.get("created_at") or "",
+                "message": msg,
+            })
+
+    # 3. PR comments (issue-level comments thread)
+    data, err = _request(
+        f"{_API_BASE}/repos/{repo}/issues/{pr_number}/comments", token)
+    if err:
+        errs.append(f"comments: {err}")
+    elif isinstance(data, list):
+        for c in data:
+            cid = c.get("id")
+            if cid is None:
+                continue
+            actor = _actor(c)
+            body = (c.get("body") or "").strip().splitlines()
+            preview = (body[0][:140] + "…") if body and len(body[0]) > 140 else (body[0] if body else "")
+            msg = f"PR #{pr_number}: new comment"
+            if actor:
+                msg += f" by @{actor}"
+            if preview:
+                msg += f" — {preview}"
+            out.append({
+                "event_id": int(cid),
+                "repo": repo, "pr_number": pr_number,
+                "kind": "github_pr_comment",
+                "actor": actor,
+                "created_at": c.get("created_at") or "",
+                "message": msg,
+            })
+
+    return out, ("; ".join(errs) if errs else None)
 
 
 def is_configured() -> bool:

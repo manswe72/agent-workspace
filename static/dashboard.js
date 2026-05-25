@@ -180,10 +180,10 @@
       'github.close':           '✕ Close',
       'github.loading':         'loading…',
       'github.empty-issues':    'No open issues assigned to you.',
-      'github.empty-prs':       'No open PRs you authored.',
+      'github.empty-prs':       'No open PRs.',
       'github.not-configured':  'No GitHub repos configured. Set the `github-repos` preference to a list of "owner/repo" strings.',
       'github.section.issues':  'Issues assigned to you',
-      'github.section.prs':     'Open PRs you authored',
+      'github.section.prs':     'Open PRs',
       'github.col.repo':        'Repo',
       'github.col.number':      '#',
       'github.col.title':       'Title',
@@ -688,6 +688,11 @@
       'mcp.kind.review_response':    'review response',
       'profile.label.github-repos':  'GitHub repos',
       'profile.help.github-repos':   'Repositories the dashboard tracks. Each entry is "owner/repo". Drives the issue/PR list, the per-workspace pill, and the default repo set when adding a new workspace.',
+      'profile.label.pr-poll':            'PR event polling',
+      'profile.label.pr-poll.toggle':    ' Notify me when a tracked PR changes state',
+      'profile.label.pr-poll.interval':  'Poll interval',
+      'profile.label.pr-poll.minutes':   'minutes',
+      'profile.help.pr-poll':            'When on, every <interval> minutes the dashboard checks every PR whose head branch matches a workspace folder for review requests, review submissions, merges, closes, and new comments. Each new event becomes a 🔔 badge on the matching workspace tab. Off by default — anonymous installs would otherwise burn the 60 req/h rate-limit unprompted.',
       'github.repos.add':            '+ Add repo',
       'github.repos.empty':          'No repos configured yet. Add at least one "owner/repo" entry.',
       'github.repos.bad-format':     'Repo must be "owner/repo".',
@@ -1206,6 +1211,11 @@
       'mcp.kind.review_response':    'granskningssvar',
       'profile.label.github-repos':  'GitHub-repon',
       'profile.help.github-repos':   'Repositorier dashboarden följer. Varje rad är "owner/repo". Styr issue/PR-listan, per-workspace-pillet och repo-urvalet när en ny workspace skapas.',
+      'profile.label.pr-poll':            'PR-händelser',
+      'profile.label.pr-poll.toggle':    ' Notifiera när en följd PR ändrar status',
+      'profile.label.pr-poll.interval':  'Pollintervall',
+      'profile.label.pr-poll.minutes':   'minuter',
+      'profile.help.pr-poll':            'När på kollar dashboarden var <intervall> minuter varje PR vars huvudbranch matchar en workspace-mapp efter review-förfrågningar, granskningar, merges, stängningar och nya kommentarer. Varje ny händelse blir ett 🔔 på matchande workspace-flik. Av som standard — anonyma installationer skulle annars sluka 60 req/h-kvoten utan användarens vetskap.',
       'github.repos.add':            '+ Lägg till repo',
       'github.repos.empty':          'Inga repon konfigurerade än. Lägg till minst en "owner/repo".',
       'github.repos.bad-format':     'Repo måste skrivas som "owner/repo".',
@@ -1923,9 +1933,62 @@
           ),
           h('div', { class: 'profile-help' },
             t('profile.help.github-repos')),
+          h('div', { class: 'profile-row',
+                       style: { marginTop: '0.6rem' } },
+            h('span', { class: 'profile-row-label' },
+              t('profile.label.pr-poll')),
+            h('label', { class: 'profile-toggle' },
+              h('input', {
+                type: 'checkbox', id: 'github-pr-poll-toggle',
+                checked: githubPrPollOn() ? '' : null,
+                onchange: (e) => {
+                  const on = !!e.target.checked;
+                  prefs.setItem('github-pr-poll-enabled', on ? '1' : '0');
+                  fetch('/api/preferences', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      preferences: { 'github-pr-poll-enabled': on },
+                    }),
+                  }).catch(() => {});
+                },
+              }),
+              t('profile.label.pr-poll.toggle'),
+            ),
+          ),
+          h('div', { class: 'profile-row' },
+            h('span', { class: 'profile-row-label' },
+              t('profile.label.pr-poll.interval')),
+            h('input', {
+              type: 'number', min: '1', max: '120', step: '1',
+              class: 'profile-input',
+              style: { width: '5rem' },
+              value: (prefs.getItem('github-pr-poll-interval-min') || '5'),
+              onchange: (e) => {
+                const v = Math.max(1, Math.min(120, +e.target.value || 5));
+                prefs.setItem('github-pr-poll-interval-min', String(v));
+                fetch('/api/preferences', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    preferences: { 'github-pr-poll-interval-min': v },
+                  }),
+                }).catch(() => {});
+              },
+            }),
+            h('span', { class: 'muted' },
+              ' ', t('profile.label.pr-poll.minutes')),
+          ),
+          h('div', { class: 'profile-help' },
+            t('profile.help.pr-poll')),
         ),
       ),
     );
+  }
+
+  function githubPrPollOn() {
+    const v = prefs.getItem('github-pr-poll-enabled');
+    return v === '1' || v === 'true';
   }
 
   // GitHub repos editor — list-based UI for the `github-repos`

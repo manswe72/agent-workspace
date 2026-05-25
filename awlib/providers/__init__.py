@@ -14,8 +14,8 @@ the launcher's bash wrapper touches.
 """
 from __future__ import annotations
 
+from . import aider, claude_code, codex, crush, cursor, gemini
 from .base import AgentProvider, ProviderNotFoundError
-from . import claude_code, codex, aider, gemini, cursor, crush
 
 # Registry — id → provider instance.
 _PROVIDERS: dict[str, AgentProvider] = {

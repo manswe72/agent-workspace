@@ -788,7 +788,7 @@ EOF
     if command -v update-desktop-database >/dev/null 2>&1; then
       update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true
     fi
-    info "shows up under 'Claude Workspace' in your app launcher"
+    info "shows up under 'Agent Workspace' in your app launcher"
     info "drag it to your desktop / pin to dock from there"
 
     # XDG autostart (no systemd). The WANT_AUTOSTART choice was

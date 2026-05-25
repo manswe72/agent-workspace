@@ -1192,6 +1192,23 @@ CREATE INDEX IF NOT EXISTS idx_agent_events_created ON agent_events(created_at);
 CREATE INDEX IF NOT EXISTS idx_agent_events_pending
   ON agent_events(issue, read_at);
 
+-- GitHub PR-event dedup set. The poller emits an agent_events row
+-- the first time it sees a (repo, pr_number, event_id) tuple and
+-- records the tuple here so subsequent poll cycles don't redeliver
+-- the same event. `kind` carries github_pr_<sub> for diagnostics.
+-- No retention pruning at runtime; startup nukes rows older than
+-- 30 days so the table doesn't grow unbounded over years.
+CREATE TABLE IF NOT EXISTS github_event_seen (
+  repo        TEXT NOT NULL,
+  pr_number   INTEGER NOT NULL,
+  event_id    INTEGER NOT NULL,
+  kind        TEXT NOT NULL,
+  seen_at     INTEGER NOT NULL,
+  PRIMARY KEY (repo, pr_number, event_id)
+);
+CREATE INDEX IF NOT EXISTS idx_github_event_seen_age
+  ON github_event_seen(seen_at);
+
 -- User preferences synced across machines via data/<user-slug>/preferences.json.
 -- Keyed by (user_slug, key) so multiple users sharing the repo each have their
 -- own preferences. Values are stored as JSON text — booleans, strings, lists.
@@ -3234,6 +3251,149 @@ def _mailbox_auto_poll_enabled() -> bool:
     except Exception:
         return True
     return _pref_truthy(raw, default=True)
+
+
+# ── GitHub PR event poller ────────────────────────────────────────────
+# Once per `github-pr-poll-interval-min` minutes, fetch
+# review_requested / review submitted / merged / closed / comment
+# events on every PR whose head branch matches a live workspace
+# folder. Newly-seen events become `agent_events` rows so the existing
+# 🔔N tab badge surfaces them; the seen-set table dedups across
+# cycles. Defaults: enabled OFF (anonymous installs would burn rate
+# limit unprompted); interval 5 minutes.
+
+DEFAULT_PR_POLL_INTERVAL_MIN = 5
+
+
+def _github_pr_poll_enabled() -> bool:
+    try:
+        conn = db_connect()
+        try:
+            raw = get_preferences(conn, _user_slug()).get(
+                "github-pr-poll-enabled")
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001
+        return False
+    return _pref_truthy(raw, default=False)
+
+
+def _github_pr_poll_interval_sec() -> int:
+    try:
+        conn = db_connect()
+        try:
+            raw = get_preferences(conn, _user_slug()).get(
+                "github-pr-poll-interval-min")
+        finally:
+            conn.close()
+        mins = int(raw) if raw not in (None, "") else DEFAULT_PR_POLL_INTERVAL_MIN
+    except Exception:  # noqa: BLE001
+        mins = DEFAULT_PR_POLL_INTERVAL_MIN
+    return max(60, mins * 60)
+
+
+def _github_pr_event_tick(worktrees_root: Path) -> None:
+    """One pass: for every workspace dir matching a configured GitHub
+    PR head branch, fetch PR events and emit agent_events rows for
+    anything not in github_event_seen. Best-effort; never raises."""
+    if not _github.is_configured():
+        return
+    if not worktrees_root.is_dir():
+        return
+    candidates: list[tuple[str, str, int]] = []  # (workspace, repo, pr_number)
+    for p in sorted(worktrees_root.iterdir()):
+        if not p.is_dir() or p.name.startswith("."):
+            continue
+        try:
+            pr = _github.pr_for_workspace(p.name)
+        except Exception:  # noqa: BLE001
+            pr = None
+        if pr and pr.get("repo") and pr.get("number"):
+            candidates.append((p.name, pr["repo"], int(pr["number"])))
+    if not candidates:
+        return
+    for workspace, repo, pr_number in candidates:
+        try:
+            events, err = _github.fetch_pr_events(repo, pr_number)
+        except Exception as ex:  # noqa: BLE001
+            log_event("warn", "github-pr-poll",
+                      "fetch failed", repo=repo, pr=pr_number,
+                      error=str(ex))
+            continue
+        if err:
+            log_event("warn", "github-pr-poll",
+                      "partial fetch", repo=repo, pr=pr_number, error=err)
+        if not events:
+            continue
+        try:
+            conn = db_connect()
+            try:
+                _emit_pr_events_dedup(conn, workspace, events)
+            finally:
+                conn.close()
+        except Exception as ex:  # noqa: BLE001
+            log_event("error", "github-pr-poll",
+                      "emit failed", workspace=workspace, error=str(ex))
+
+
+def _emit_pr_events_dedup(conn: sqlite3.Connection,
+                           workspace: str, events: list[dict]) -> None:
+    """Insert each unseen event into agent_events, then record it in
+    github_event_seen so the next tick skips it."""
+    now = int(time.time())
+    seen_rows = conn.execute(
+        "SELECT event_id FROM github_event_seen WHERE repo = ? AND pr_number = ?",
+        (events[0]["repo"], events[0]["pr_number"])).fetchall()
+    seen = {r[0] for r in seen_rows}
+    new_count = 0
+    for e in events:
+        if e["event_id"] in seen:
+            continue
+        insert_agent_event(
+            conn, kind=e["kind"], issue=workspace,
+            message=e.get("message") or "", cwd="")
+        conn.execute(
+            "INSERT OR IGNORE INTO github_event_seen "
+            "(repo, pr_number, event_id, kind, seen_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (e["repo"], e["pr_number"], e["event_id"], e["kind"], now))
+        new_count += 1
+    if new_count:
+        conn.commit()
+        log_event("info", "github-pr-poll",
+                  "emitted events", workspace=workspace, count=new_count)
+
+
+def github_pr_event_loop(worktrees_root: Path) -> None:
+    """Background thread entry. Honours the toggle + interval prefs
+    each cycle so the user can flip them live without a restart."""
+    # Slice the wait so a toggled-off poller stops responding fast.
+    slice_s = 30
+    while True:
+        try:
+            enabled = _github_pr_poll_enabled()
+        except Exception:  # noqa: BLE001
+            enabled = False
+        if not enabled:
+            time.sleep(slice_s)
+            continue
+        interval = _github_pr_poll_interval_sec()
+        try:
+            _github_pr_event_tick(worktrees_root)
+        except Exception as ex:  # noqa: BLE001
+            log_event("error", "github-pr-poll",
+                      "tick crashed", error=str(ex))
+        slept = 0
+        while slept < interval:
+            time.sleep(min(slice_s, interval - slept))
+            slept += slice_s
+            # Re-check the toggle inside the wait so flipping it off
+            # mid-sleep stops the next tick within ~30 s.
+            try:
+                if not _github_pr_poll_enabled():
+                    break
+            except Exception:  # noqa: BLE001
+                break
 
 
 def mailbox_auto_poll_loop() -> None:
@@ -7248,11 +7408,32 @@ def main(argv: list[str] | None = None) -> int:
         print("auto-sync thread disabled (--no-sync)")
 
     # Mailbox auto-poll thread. Always runs; the `mailbox-auto-poll`
-    # pref (default OFF) gates whether each tick actually does any
+    # pref (default ON) gates whether each tick actually does any
     # work, so toggling from the dashboard takes effect immediately.
     threading.Thread(
         target=mailbox_auto_poll_loop,
         daemon=True, name="mailbox-auto-poll",
+    ).start()
+
+    # GitHub PR event poller. Always running; the
+    # `github-pr-poll-enabled` pref (default OFF) gates per-tick
+    # work. Prunes the dedup table on startup so old events expire.
+    try:
+        conn = db_connect()
+        try:
+            conn.execute(
+                "DELETE FROM github_event_seen "
+                "WHERE seen_at < ?",
+                (int(time.time()) - 30 * 86400,))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001
+        pass
+    threading.Thread(
+        target=github_pr_event_loop,
+        args=(args.worktrees,),
+        daemon=True, name="github-pr-poll",
     ).start()
 
     # Auto-update checker. Polls the dashboard repo's origin every

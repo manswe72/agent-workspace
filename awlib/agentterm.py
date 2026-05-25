@@ -728,6 +728,7 @@ def build_agent_argv(issue: str,
     arbitrary characters without breaking the line.
     """
     import shlex
+
     from awlib import providers
     # The pinned "General Agent" tab uses the sentinel issue name
     # __agent__ and lives at the dashboard's worktrees root so the
