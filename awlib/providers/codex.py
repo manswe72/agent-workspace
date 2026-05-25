@@ -1,15 +1,26 @@
 """OpenAI Codex CLI provider.
 
-`codex resume --last` resumes the latest session in cwd; falls back to
-`codex` for a fresh session. Pricing follows the public OpenAI tariff
-for the default `gpt-5` family (override via the user pricing pref).
+`codex resume --last` resumes the latest session in cwd; falls back
+to `codex` for a fresh session. Pricing follows the public OpenAI
+tariff for the default `gpt-5` family (override via the user
+pricing pref).
+
+MCP: Codex reads servers from `~/.codex/config.toml` under
+`[mcp_servers.<name>]`. Identity flows through `X-Agent-Id` over an
+HTTP header that resolves from the launcher's
+`$AGENT_WORKSPACE_AGENT_ID` env var.
 """
 from __future__ import annotations
 
 import shlex
 from pathlib import Path
 
-from .base import AgentProvider, liveness_bash_block, marker_file
+from .base import (
+    AgentProvider,
+    ensure_codex_mcp_config,
+    liveness_bash_block,
+    marker_file,
+)
 
 
 class CodexProvider(AgentProvider):
@@ -25,13 +36,14 @@ class CodexProvider(AgentProvider):
         model: str | None,
         mcp_config_path: Path | None,
     ) -> str:
-        # codex picks the cwd it was launched in; sys_prompt is exported
-        # via OPENAI_AGENT_PROMPT so the user can wire it into a
-        # ~/.codex/config.toml hook if they like.
         marker = marker_file(Path.cwd(), self.id)
         liveness = liveness_bash_block(marker)
         prompt_q = shlex.quote(sys_prompt)
         model_arg = f" --model {shlex.quote(model)}" if model else ""
+        # Auto-register the dashboard's MCP server in
+        # ~/.codex/config.toml. Identity per launch is carried by
+        # AGENT_WORKSPACE_AGENT_ID (set in the spawned shell).
+        ensure_codex_mcp_config()
         return (
             f"{liveness}"
             f"export AGENT_SYS_PROMPT={prompt_q}; "
@@ -39,20 +51,18 @@ class CodexProvider(AgentProvider):
             f"|| codex{model_arg}"
         )
 
-
     def supports_mcp(self) -> bool:
-        # Codex CLI reads MCP servers from ~/.codex/config.toml under
-        # [mcp_servers]. The dashboard doesn't auto-inject; users can
-        # add the dashboard's /mcp?agent=<id> URL by hand if they want
-        # the cross-agent mailbox from Codex sessions.
+        return True
+
+    def auto_registers_mcp(self) -> bool:
         return True
 
     def model_pricing(self) -> dict[str, dict[str, float]]:
         # Best-effort defaults; users override via the dashboard's
-        # pricing.json. Cache pricing left at 0 — Codex doesn't surface
-        # prompt-cache info the way Claude does.
+        # pricing.json. Cache pricing left at 0 — Codex doesn't
+        # surface prompt-cache info the way Claude does.
         return {
-            "codex:gpt-5":         {"in":  5.00, "out": 15.00, "cache_r": 0.0, "cache_w": 0.0},
-            "codex:gpt-4o":        {"in":  2.50, "out": 10.00, "cache_r": 0.0, "cache_w": 0.0},
-            "codex:gpt-4o-mini":   {"in":  0.15, "out":  0.60, "cache_r": 0.0, "cache_w": 0.0},
+            "codex:gpt-5":       {"in": 5.00, "out": 15.00, "cache_r": 0.0, "cache_w": 0.0},
+            "codex:gpt-4o":      {"in": 2.50, "out": 10.00, "cache_r": 0.0, "cache_w": 0.0},
+            "codex:gpt-4o-mini": {"in": 0.15, "out":  0.60, "cache_r": 0.0, "cache_w": 0.0},
         }

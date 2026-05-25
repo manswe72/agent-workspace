@@ -1,10 +1,21 @@
-"""Cursor Agent CLI provider — closed-source headless agent."""
+"""Cursor Agent CLI provider.
+
+Closed-source agent CLI from cursor.com. Speaks MCP — reads its
+server list from `~/.cursor/mcp.json`. Identity flows via an
+`X-Agent-Id` HTTP header that the launcher's exported
+`$AGENT_WORKSPACE_AGENT_ID` env var resolves into.
+"""
 from __future__ import annotations
 
 import shlex
 from pathlib import Path
 
-from .base import AgentProvider, liveness_bash_block, marker_file
+from .base import (
+    AgentProvider,
+    ensure_cursor_mcp_config,
+    liveness_bash_block,
+    marker_file,
+)
 
 
 class CursorProvider(AgentProvider):
@@ -23,6 +34,11 @@ class CursorProvider(AgentProvider):
         marker = marker_file(Path.cwd(), self.id)
         liveness = liveness_bash_block(marker)
         model_arg = f" --model {shlex.quote(model)}" if model else ""
+        # Auto-register the dashboard's MCP server in the user's
+        # global ~/.cursor/mcp.json. Identity per launch is carried by
+        # AGENT_WORKSPACE_AGENT_ID, which the dashboard sets in the
+        # spawned shell's env (see agentterm + agent_workspace.py).
+        ensure_cursor_mcp_config()
         return (
             f"{liveness}"
             f"cursor-agent resume{model_arg} 2>/dev/null "
@@ -30,6 +46,7 @@ class CursorProvider(AgentProvider):
         )
 
     def supports_mcp(self) -> bool:
-        # Cursor reads MCP servers from ~/.cursor/mcp.json. Dashboard
-        # doesn't auto-inject — same caveat as Codex / Gemini.
+        return True
+
+    def auto_registers_mcp(self) -> bool:
         return True

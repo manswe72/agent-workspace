@@ -7207,6 +7207,12 @@ def main(argv: list[str] | None = None) -> int:
     server = _QuietServer((args.bind, args.port),
                           make_handler(args.worktrees, args.behind,
                                         primaries_root=args.primaries))
+    # Expose the bound port to the running server's own env so provider
+    # modules that build MCP-config URLs (cursor.py / codex.py /
+    # gemini.py) read the right number when --port differs from the
+    # default. The launcher already exports this into the spawned
+    # shell — this just covers the in-process side.
+    os.environ["AGENT_WORKSPACE_PORT"] = str(args.port)
     # Pidfile is written *after* a successful bind so a failed second
     # start (EADDRINUSE) can't clobber a good pidfile. Removed on exit
     # only if it still points at us — prevents racing a fresh restart.

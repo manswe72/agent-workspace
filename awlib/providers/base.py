@@ -107,10 +107,21 @@ def ensure_codex_mcp_config() -> Path:
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
     name = mcp_server_name()
     block_header = f"[mcp_servers.{name}]"
+    # Codex CLI key names (verified against `codex mcp get` output):
+    #   - http_headers       — literal header values (TOML doesn't
+    #                           interpolate env vars here, so we
+    #                           write a placeholder the user can
+    #                           replace OR fall back to
+    #                           env_http_headers below)
+    #   - env_http_headers   — map of HEADER_NAME → ENV_VAR_NAME;
+    #                           Codex reads the value from the env at
+    #                           launch. This is what we want — agent
+    #                           identity is set per-launch via the
+    #                           dashboard's pty env.
     new_block = (
         f"{block_header}\n"
         f'url = "{dashboard_mcp_url()}"\n'
-        f'headers = {{ "X-Agent-Id" = "${{AGENT_WORKSPACE_AGENT_ID}}" }}\n'
+        f'env_http_headers = {{ "X-Agent-Id" = "AGENT_WORKSPACE_AGENT_ID" }}\n'
         f'approval_policy = "never"\n'
     )
     existing = cfg_path.read_text() if cfg_path.is_file() else ""
