@@ -110,6 +110,28 @@ are exposed:
   live workspace agent (the General Agent and you are excluded).
   Use sparingly — it interrupts everyone.
 
+### Hub-and-spoke tools (General Agent uses these)
+
+- **`delegate(to, task, context=?, deadline=?)`** — *hub-only*. As
+  the General Agent, hand a piece of work to a specific spoke and
+  track its completion on the Delegations board. The recipient
+  sees a `📋 Delegation: …` message; their reply (with
+  `in_reply_to=<delegation_id>`) marks it resolved. Use this
+  instead of plain `send_message` when you actually need an answer
+  back, not just a fire-and-forget note.
+- **`route(pattern, text, exclude_self=true)`** — fan a message to
+  every agent whose id or display name matches a substring (e.g.
+  `pattern='docs'` reaches every workspace tagged "docs") or a
+  regex (e.g. `pattern='/^[0-9]+-/'` reaches every numbered
+  workspace). The General Agent is excluded unless the pattern
+  explicitly names it.
+- **`list_delegations(status='any', mine_only=false, to_me=false)`**
+  — status board. Returns every delegation with its current
+  state (`open` / `resolved`), who sent and received it, the
+  resolver's reply text, etc. The General Agent uses this as its
+  primary "what's outstanding" view; spokes call it with
+  `to_me=true` to see what's been delegated to them.
+
 **Reply IMMEDIATELY once you've done the work — do NOT ask the
 user to confirm.** The agent on the other end is waiting on you,
 not the user. The dashboard pre-allows the MCP tools via its config

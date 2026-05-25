@@ -26,6 +26,7 @@ which the dashboard calls from its startup migration block.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import time
 
@@ -79,7 +80,84 @@ def init_db(conn: sqlite3.Connection) -> None:
 
 # ── Storage helpers ───────────────────────────────────────────────────────
 
-VALID_KINDS = ("message", "review_request", "review_response")
+VALID_KINDS = ("message", "review_request", "review_response", "delegation")
+
+
+def list_delegations(conn: sqlite3.Connection,
+                      from_agent: str | None = None,
+                      to_agent: str | None = None,
+                      status: str = "any",
+                      limit: int = 100) -> list[dict]:
+    """Return delegation rows + their resolution state.
+
+    A delegation is open until the recipient replies (any agent_messages
+    row whose in_reply_to points at the delegation). The first such
+    reply resolves it; the resolver's id + summary text are returned
+    inline so callers don't need a second query to render a status
+    board.
+
+    Filters:
+      from_agent — only delegations sent by this agent (the hub).
+      to_agent   — only delegations addressed to this agent (a spoke).
+      status     — 'open' | 'resolved' | 'any' (default 'any').
+    """
+    where = ["d.kind = 'delegation'"]
+    params: list = []
+    if from_agent:
+        where.append("d.from_agent = ?")
+        params.append(from_agent)
+    if to_agent:
+        where.append("d.to_agent = ?")
+        params.append(to_agent)
+    sql = (
+        "SELECT d.id, d.from_agent, d.to_agent, d.payload, d.created_at, "
+        "       r.id AS reply_id, r.from_agent AS reply_from, "
+        "       r.payload AS reply_payload, r.created_at AS reply_at "
+        "FROM agent_messages d "
+        "LEFT JOIN agent_messages r "
+        "       ON r.in_reply_to = d.id "
+        "WHERE " + " AND ".join(where)
+        + " ORDER BY d.created_at DESC LIMIT ?"
+    )
+    params.append(int(limit))
+    out: list[dict] = []
+    for row in conn.execute(sql, params).fetchall():
+        try:
+            payload = json.loads(row[3])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            payload = {"text": row[3] or ""}
+        item = {
+            "id":         row[0],
+            "from_agent": row[1],
+            "to_agent":   row[2],
+            "task":       payload.get("task") or payload.get("text") or "",
+            "context":    payload.get("context") or "",
+            "deadline":   payload.get("deadline") or "",
+            "created_at": row[4],
+            "status":     "open",
+            "resolved_by": None,
+            "resolved_at": None,
+            "reply_id":    None,
+            "reply_text":  "",
+        }
+        if row[5] is not None:
+            try:
+                reply_payload = json.loads(row[7] or "{}")
+            except (TypeError, ValueError, json.JSONDecodeError):
+                reply_payload = {"text": row[7] or ""}
+            item.update({
+                "status":      "resolved",
+                "resolved_by": row[6],
+                "resolved_at": row[8],
+                "reply_id":    row[5],
+                "reply_text":  reply_payload.get("text") or "",
+            })
+        if status == "open" and item["status"] != "open":
+            continue
+        if status == "resolved" and item["status"] != "resolved":
+            continue
+        out.append(item)
+    return out
 
 
 def send_message(conn: sqlite3.Connection,
@@ -435,6 +513,110 @@ TOOLS = [
             },
         },
     },
+    {
+        "name": "delegate",
+        "description": (
+            "Hub-only. As the General Agent ('__agent__'), hand a "
+            "task to a specific spoke agent and track its completion. "
+            "Delegations are first-class in the dashboard: they "
+            "appear on a Delegations board until the recipient "
+            "replies (via `send_message` with `in_reply_to` set to "
+            "the delegation id), which marks them resolved. Use this "
+            "instead of `send_message` when you're parcelling out "
+            "work you actually expect to get an answer back on."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "to":       {"type": "string",
+                              "description":
+                                "Recipient agent id (workspace id or "
+                                "display name)."},
+                "task":     {"type": "string",
+                              "description":
+                                "Short one-line task description."},
+                "context":  {"type": "string",
+                              "description":
+                                "Longer context, hints, links — "
+                                "everything the worker needs to "
+                                "actually do it.",
+                              "default": ""},
+                "deadline": {"type": "string",
+                              "description":
+                                "Optional free-form deadline string "
+                                "('EOD', 'tomorrow', '2026-12-01'). "
+                                "Stored as-is.",
+                              "default": ""},
+            },
+            "required": ["to", "task"],
+        },
+    },
+    {
+        "name": "route",
+        "description": (
+            "Fan a message out to every agent whose canonical id OR "
+            "display name matches a substring/regex pattern. The "
+            "General Agent ('__agent__') is excluded unless the "
+            "pattern explicitly matches it. Useful when you don't "
+            "know the exact recipient id but know a tag/role/team "
+            "you've baked into your workspace names — e.g. "
+            "`route(pattern='docs', text='...')` reaches every "
+            "workspace whose name contains 'docs'. Returns the "
+            "number of recipients + their ids so the sender knows "
+            "the message landed."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string",
+                             "description":
+                               "Substring or /regex/ pattern. "
+                               "Matched against canonical id AND "
+                               "display name."},
+                "text":    {"type": "string",
+                             "description": "Message body."},
+                "exclude_self": {"type": "boolean",
+                                   "description":
+                                     "Skip the caller. Default true.",
+                                   "default": True},
+            },
+            "required": ["pattern", "text"],
+        },
+    },
+    {
+        "name": "list_delegations",
+        "description": (
+            "Return current and historical delegations. By default "
+            "shows every delegation visible on this dashboard "
+            "(useful for the General Agent as a status board); "
+            "narrow with the filters below. A delegation is 'open' "
+            "until the recipient replies; the first reply resolves "
+            "it. Returns JSON: id, from_agent, to_agent, task, "
+            "context, deadline, status, resolved_by, resolved_at, "
+            "reply_text, etc."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "status":   {"type": "string",
+                              "enum": ["open", "resolved", "any"],
+                              "default": "any"},
+                "mine_only":{"type": "boolean",
+                              "description":
+                                "Only delegations I sent. Default "
+                                "false (show everyone's).",
+                              "default": False},
+                "to_me":    {"type": "boolean",
+                              "description":
+                                "Only delegations addressed to me. "
+                                "Default false.",
+                              "default": False},
+                "limit":    {"type": "integer",
+                              "default": 50, "minimum": 1,
+                              "maximum": 200},
+            },
+        },
+    },
 ]
 
 
@@ -526,6 +708,12 @@ class McpServer:
                 text = self._tool_broadcast_message(agent, args)
             elif name == "list_agents":
                 text = self._tool_list_agents(args)
+            elif name == "delegate":
+                text = self._tool_delegate(agent, args)
+            elif name == "route":
+                text = self._tool_route(agent, args)
+            elif name == "list_delegations":
+                text = self._tool_list_delegations(agent, args)
             else:
                 return self._err(rpc_id, -32602, f"unknown tool: {name}")
         except ValueError as ex:
@@ -672,6 +860,140 @@ class McpServer:
         if not agents:
             return "no agents"
         return json.dumps(agents, indent=2, default=str)
+
+    # ── hub-and-spoke tools ─────────────────────────────────────
+
+    def _tool_delegate(self, agent: str, args: dict) -> str:
+        """Hub-only handoff. Only the General Agent ('__agent__')
+        can call this — spokes use `send_message` instead. Creates
+        a kind='delegation' row that the dashboard surfaces on a
+        Delegations board until the recipient replies."""
+        if agent != "__agent__":
+            raise ValueError(
+                "delegate is hub-only — only the General Agent "
+                "('__agent__') can call it. Spoke agents use "
+                "`send_message` for non-tracked communication.")
+        to = (args.get("to") or "").strip()
+        task = (args.get("task") or "").strip()
+        context = (args.get("context") or "").strip()
+        deadline = (args.get("deadline") or "").strip()
+        if not to:
+            raise ValueError("missing `to`")
+        if not task:
+            raise ValueError("missing `task`")
+        canonical = self._resolve_recipient(to)
+        if canonical == "__agent__":
+            raise ValueError(
+                "can't delegate to the General Agent itself")
+        payload = {"task": task, "context": context}
+        if deadline:
+            payload["deadline"] = deadline
+        # Build a richer `text` field so the recipient's
+        # read_messages sees a useful summary without needing to
+        # parse the structured fields.
+        text_lines = [f"📋 Delegation: {task}"]
+        if context:
+            text_lines.append("")
+            text_lines.append(context)
+        if deadline:
+            text_lines.append("")
+            text_lines.append(f"Deadline: {deadline}")
+        text_lines.append("")
+        text_lines.append(
+            "(Reply to this message — set in_reply_to=<this id> on "
+            "your send_message call — to mark the delegation done.)")
+        payload["text"] = "\n".join(text_lines)
+        conn = self._db()
+        try:
+            mid = send_message(conn, agent, canonical, "delegation",
+                                payload)
+        finally:
+            conn.close()
+        suffix = "" if canonical == to else f" ({canonical!r})"
+        return (f"delegated #{mid} to {to}{suffix}: {task!r}")
+
+    def _tool_route(self, agent: str, args: dict) -> str:
+        """Fan a message out to every agent whose canonical id OR
+        display name matches a substring or /regex/ pattern. Hub-
+        agnostic — any agent can call this, but the prototypical
+        use is the hub addressing a role-tagged subset of spokes."""
+        pattern = (args.get("pattern") or "").strip()
+        text = (args.get("text") or "").strip()
+        exclude_self = bool(args.get("exclude_self", True))
+        if not pattern:
+            raise ValueError("missing `pattern`")
+        if not text:
+            raise ValueError("missing `text`")
+        # /…/ syntax → regex; bare string → case-insensitive substring.
+        regex = None
+        if len(pattern) >= 2 and pattern[0] == "/" and pattern[-1] == "/":
+            try:
+                regex = re.compile(pattern[1:-1], re.IGNORECASE)
+            except re.error as ex:
+                raise ValueError(f"bad regex: {ex}") from ex
+        try:
+            agents = self._agents_info()
+        except Exception as ex:  # noqa: BLE001
+            raise ValueError(f"could not enumerate agents: {ex}") from ex
+        recipients: list[str] = []
+        for a in agents:
+            aid = a.get("id") or ""
+            name = a.get("name") or ""
+            # The hub itself is only matched when the pattern is
+            # explicit about it; bare 'docs' shouldn't grab Agent 007.
+            if aid == "__agent__" and pattern.lower() not in (
+                    "__agent__", "agent", "agent 007", "general"):
+                if not (regex and (regex.search(aid)
+                                    or regex.search(name))):
+                    continue
+            haystack = f"{aid}\x00{name}".lower()
+            matched = (
+                regex.search(aid) or regex.search(name)
+                if regex else (pattern.lower() in haystack)
+            )
+            if matched:
+                recipients.append(aid)
+        if exclude_self:
+            recipients = [r for r in recipients if r != agent]
+        if not recipients:
+            return (f"no agents matched pattern {pattern!r} "
+                    f"(searched id + display name)")
+        conn = self._db()
+        try:
+            ids: list[int] = []
+            for to in recipients:
+                mid = send_message(conn, agent, to, "message",
+                                    {"text": text, "routed": True,
+                                     "route_pattern": pattern})
+                ids.append(mid)
+        finally:
+            conn.close()
+        return (f"routed to {len(ids)} agent(s) matching "
+                f"{pattern!r}: {', '.join(recipients)} (ids: "
+                f"{', '.join(f'#{i}' for i in ids)})")
+
+    def _tool_list_delegations(self, agent: str, args: dict) -> str:
+        status = (args.get("status") or "any").lower()
+        if status not in ("open", "resolved", "any"):
+            raise ValueError(
+                "`status` must be one of: open, resolved, any")
+        mine_only = bool(args.get("mine_only", False))
+        to_me = bool(args.get("to_me", False))
+        limit = int(args.get("limit", 50))
+        conn = self._db()
+        try:
+            rows = list_delegations(
+                conn,
+                from_agent=(agent if mine_only else None),
+                to_agent=(agent if to_me else None),
+                status=status,
+                limit=limit,
+            )
+        finally:
+            conn.close()
+        if not rows:
+            return "no delegations"
+        return json.dumps(rows, indent=2, default=str)
 
     # ── helpers ─────────────────────────────────────────────────
 
