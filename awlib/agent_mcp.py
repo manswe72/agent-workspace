@@ -925,10 +925,21 @@ class McpServer:
         if not text:
             raise ValueError("missing `text`")
         # /…/ syntax → regex; bare string → case-insensitive substring.
+        # Cap the inner regex at 128 chars to bound ReDoS exposure:
+        # the only sane use of this surface is "match a workspace
+        # tag", which never needs more characters. Catastrophic
+        # backtracking on a 128-char regex against ~5 short agent
+        # ids is bounded in the milliseconds.
         regex = None
         if len(pattern) >= 2 and pattern[0] == "/" and pattern[-1] == "/":
+            inner = pattern[1:-1]
+            if len(inner) > 128:
+                raise ValueError(
+                    "regex pattern too long (max 128 chars) — "
+                    "this surface is for workspace-tag matching, "
+                    "not arbitrary expression evaluation")
             try:
-                regex = re.compile(pattern[1:-1], re.IGNORECASE)
+                regex = re.compile(inner, re.IGNORECASE)
             except re.error as ex:
                 raise ValueError(f"bad regex: {ex}") from ex
         try:

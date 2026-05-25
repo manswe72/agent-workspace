@@ -6236,8 +6236,28 @@ def make_handler(worktrees_root: Path, behind_limit: int,
             data = body.get("data", "")
             file_path = body.get("file", "")
             if not data and file_path:
+                # Defence against the "file-read-anywhere" CodeQL
+                # alert: constrain the path to the user's HOME (which
+                # transitively covers the worktrees root + the
+                # dashboard's own cache + the user's pictures dir).
+                # Drag-and-drop in the dashboard always points at
+                # files under HOME, so this is just hardening — no
+                # legitimate caller is rejected.
                 try:
-                    with open(file_path, "rb") as fh:
+                    abs_file = Path(file_path).expanduser().resolve(
+                        strict=False)
+                    home_root = Path.home().resolve(strict=False)
+                    abs_file.relative_to(home_root)
+                except (OSError, ValueError):
+                    self._send_json(400, {
+                        "error": "file path must be inside $HOME"})
+                    return
+                if not abs_file.is_file():
+                    self._send_json(400, {
+                        "error": f"not a regular file: {abs_file}"})
+                    return
+                try:
+                    with open(abs_file, "rb") as fh:
                         data = _b64.b64encode(fh.read()).decode()
                 except OSError as exc:
                     self._send_json(400, {"error": str(exc)})

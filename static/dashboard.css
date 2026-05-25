@@ -2658,6 +2658,13 @@ td.note-due-none    .note-due-rel { color: var(--fg-muted); opacity: 0.7; }
   padding: 0.85rem 1rem;
   display: flex; flex-direction: column; gap: 0.4rem;
 }
+/* Sub-block for "Also create GitHub issue" — inherits the same
+   vertical-stack layout so labels sit above their controls
+   instead of running inline next to <select>/<input>. */
+.add-issue-gh-block,
+.add-issue-gh-block > div {
+  display: flex; flex-direction: column; gap: 0.4rem;
+}
 .add-issue-label {
   font-size: 11px; color: var(--fg-muted);
   text-transform: uppercase; letter-spacing: 0.06em;
