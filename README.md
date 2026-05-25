@@ -145,20 +145,31 @@ Inside each tab:
 
 ## Quick start
 
+Download the release tarball, extract it, and run the installer:
+
 ```bash
-git clone <agent-workspace-url> ~/github/agent-workspace
-cd ~/github/agent-workspace
-./setup.sh
+tar xzf agent-workspace-*.tar.gz
+cd agent-workspace-*/
+./install.sh
 ```
 
-`setup.sh` checks prerequisites (Python ≥ 3.10, git), symlinks the
-binaries into `~/.local/bin`, installs bash completions, and offers
-to wire Claude Code hooks (Claude Code provider only). On Linux it
-also drops an **Agent Workspace** app-launcher entry under
-`~/.local/share/applications/` (so the dashboard shows up in your system
-menu / dock — clicking it starts the server if needed and opens the
-dashboard) and offers to register an autostart entry so the server
-starts on login. The per-platform mechanism is auto-detected:
+`install.sh` is a thin wrapper around `setup.sh` (which does the
+real per-machine work — see [Developer install](#developer-install)
+below if you'd rather work from a git clone). Both run identically:
+they check prerequisites (Python ≥ 3.10, git), symlink the binaries
+from `./bin` into `~/.local/bin`, install bash completions, and offer
+to wire Claude Code hooks (Claude Code provider only).
+
+A release install ships **just the source files needed to run the
+server** — no `.git/`, no tests, no packaging scaffolding. The in-app
+**Update server** button is greyed out in this mode; upgrade by
+downloading the next tarball and re-running `./install.sh`.
+
+On Linux the installer also drops an **Agent Workspace** app-launcher
+entry under `~/.local/share/applications/` (so the dashboard shows up
+in your system menu / dock — clicking it starts the server if needed
+and opens the dashboard) and offers to register an autostart entry so
+the server starts on login. The per-platform mechanism is auto-detected:
 
 | Platform | Autostart mechanism |
 |---|---|
@@ -167,7 +178,7 @@ starts on login. The per-platform mechanism is auto-detected:
 | Windows / Git Bash | Startup folder — `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\agent-workspace.vbs` (silent .vbs launcher, no console window) |
 
 The autostart prompt can be skipped with `--no-autostart` or pre-answered
-yes with `--autostart`. `setup.sh --uninstall` removes whichever entry
+yes with `--autostart`. `./install.sh --uninstall` removes whichever entry
 matches the current OS. Then:
 
 ```bash
@@ -177,6 +188,33 @@ agent-worktrees-server         # start the dashboard
 
 Tested on Linux, macOS, and Windows (via Git Bash). The per-platform
 notes below cover the small differences.
+
+### Developer install
+
+Hacking on the source? Clone the repo instead of using the tarball
+so the in-app **Update server** button stays wired up to `git pull`:
+
+```bash
+git clone <agent-workspace-url> ~/github/agent-workspace
+cd ~/github/agent-workspace
+./setup.sh
+```
+
+Same prerequisites, same `~/.local/bin` symlinks, same autostart
+prompts. The only differences are:
+
+- `setup.sh` installs the local pre-push hook (ruff + pytest before
+  every `git push`).
+- The dashboard detects the `.git/` directory and enables the
+  Update server button + auto-update-check toggle in
+  Profile → Server.
+
+Build a release tarball for distribution with:
+
+```bash
+./bin/build-release-tarball.sh
+# → dist/agent-workspace-<VERSION>.tar.gz
+```
 
 ### Windows (via Git Bash)
 
@@ -215,15 +253,16 @@ pip install pywinpty ruff pytest
 Install (run inside Git Bash):
 
 ```bash
-git clone <agent-workspace-url> ~/github/agent-workspace
-cd ~/github/agent-workspace
-./setup.sh
+tar xzf agent-workspace-*.tar.gz
+cd agent-workspace-*/
+./install.sh
 agent-worktrees-server
 ```
 
 `~/bin` is on Git Bash's PATH by default, so `agent-worktrees-server`,
 `agent-worktrees-restart`, and `agent-worktrees-stop` are
-immediately available in any new shell.
+immediately available in any new shell. (Or `git clone` + `./setup.sh`
+for a developer install — see [Developer install](#developer-install).)
 
 ### macOS
 
@@ -258,32 +297,16 @@ exec zsh
 Install:
 
 ```bash
-git clone <agent-workspace-url> ~/github/agent-workspace
-cd ~/github/agent-workspace
-./setup.sh
+tar xzf agent-workspace-*.tar.gz
+cd agent-workspace-*/
+./install.sh
 agent-worktrees-server
 ```
 
 Grant the dashboard tab Web Notification permission from the toolbar so
 agent events still surface on your desktop. The in-page toast pop-up
-works on macOS regardless.
-
-### One-line bootstrap (new machine)
-
-`install.sh` clones (or fast-forwards) the repo and runs `setup.sh`:
-
-```bash
-# After hosting install.sh on any HTTPS endpoint:
-curl -fsSL https://<host>/install.sh | bash
-
-# Or straight from the SSH remote (no HTTPS host needed):
-ssh <git-host> 'git archive --remote=<repo-path> HEAD install.sh' \
-  | tar -xO install.sh | bash
-```
-
-Flags: `--repo URL`, `--dir PATH`, `--branch NAME`, `--no-setup`. Anything
-else is forwarded to `setup.sh` (e.g. `--non-interactive`, `--systemd`,
-`--enable-claude-hooks`).
+works on macOS regardless. (Or `git clone` + `./setup.sh` for a
+developer install — see [Developer install](#developer-install).)
 
 ### Install as a PWA (recommended on every platform)
 

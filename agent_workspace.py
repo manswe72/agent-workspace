@@ -678,6 +678,25 @@ HEATMAP_DAYS = 365                  # 1-year window
 REPO_DIR = Path(__file__).parent.resolve()
 
 
+def is_developer_install() -> bool:
+    """True when the dashboard is running from a git checkout that
+    has an `origin` remote — the only mode where the in-app Update
+    button can do anything useful (it calls `git pull --ff-only`).
+    Release tarballs ship the source without `.git/`, so this
+    returns False there and the frontend greys the button out."""
+    if not (REPO_DIR / ".git").exists():
+        return False
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(REPO_DIR),
+             "remote", "get-url", "origin"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return r.returncode == 0 and bool((r.stdout or "").strip())
+
+
 def _resolve_data_dir() -> Path:
     """Pick the data dir, preferring an existing repo-local one for
     backward compatibility, otherwise $XDG_DATA_HOME/agent-workspace/data."""
@@ -3741,6 +3760,10 @@ def updater_loop() -> None:
         try:
             if not _auto_update_enabled():
                 continue
+            # Release tarball installs have no git remote, so the
+            # poll would just churn out errors. Skip the tick.
+            if not is_developer_install():
+                continue
             prev = _updater.get_status()
             cur = _updater.check_remote(REPO_DIR)
             _updater.set_status(cur)
@@ -5100,8 +5123,14 @@ def make_handler(worktrees_root: Path, behind_limit: int,
 
             elif path == "/api/update/status":
                 # Auto-update banner reads from this every refresh.
-                # Cheap — returns the cached _STATUS dict.
-                self._send_json(200, _updater.get_status())
+                # Cheap — returns the cached _STATUS dict. The
+                # `developer_install` flag tells the frontend
+                # whether the Update button is operable (it runs
+                # `git pull` server-side; only meaningful when the
+                # process is running from a git checkout).
+                status = _updater.get_status()
+                status["developer_install"] = is_developer_install()
+                self._send_json(200, status)
 
             elif path == "/api/stashes":
                 # General Agent's Stashes sub-tab. Walks every
@@ -5485,11 +5514,25 @@ def make_handler(worktrees_root: Path, behind_limit: int,
             elif parsed.path == "/api/update/check":
                 # Manual "check now" — bypass the 10-min poll. Used
                 # by the banner's ↻ link. Returns the fresh status.
+                # Release tarball installs have no git remote to
+                # check against, so refuse early.
+                if not is_developer_install():
+                    self._send_json(400, {
+                        "error": "update unavailable on release "
+                                 "installs — re-download the tarball "
+                                 "to upgrade"})
+                    return
                 cur = _updater.check_remote(REPO_DIR)
                 _updater.set_status(cur)
                 self._send_json(200, cur)
 
             elif parsed.path == "/api/update/apply":
+                if not is_developer_install():
+                    self._send_json(400, {
+                        "error": "update unavailable on release "
+                                 "installs — re-download the tarball "
+                                 "to upgrade"})
+                    return
                 self._do_update_apply()
 
             elif parsed.path == "/api/server/restart":

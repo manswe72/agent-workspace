@@ -1,136 +1,81 @@
 #!/usr/bin/env bash
-# install.sh — one-line bootstrap for agent-workspace.
+# install.sh — release-install entry point for agent-workspace.
 #
-# Clones (or updates) the repo into ~/github/agent-workspace and runs
-# setup.sh, which does the per-machine install (symlinks, completions,
-# optional systemd unit, optional Claude Code hooks).
+# This script is shipped INSIDE the release tarball. After the user
+# extracts `agent-workspace-<version>.tar.gz`, they run:
 #
-# Usage (interactive):
-#   bash install.sh --repo https://github.com/<user>/agent-workspace.git
+#   cd agent-workspace-<version>
+#   ./install.sh
 #
-# Usage (one-line, after hosting this file on an HTTPS endpoint):
-#   curl -fsSL https://<host>/install.sh | bash -s -- --repo <git-url>
-#   curl -fsSL https://<host>/install.sh | bash -s -- --repo <git-url> --non-interactive
+# install.sh delegates to setup.sh, which does the per-machine work:
+# symlinks the binaries from ./bin into ~/.local/bin, installs bash
+# completions, optionally drops an autostart entry, optionally wires
+# Claude Code hooks.
 #
-# Flags:
-#   --repo URL        git remote to clone (REQUIRED — no default)
-#   --dir PATH        where to clone (default: ~/github/agent-workspace)
-#   --branch NAME     branch / tag / SHA to check out (default: origin HEAD)
-#   --no-setup        skip the setup.sh step (just clone)
-#   any other flags   forwarded to setup.sh
+# The release tarball has no .git/, so the in-app Update button is
+# disabled (see is_developer_install() in agent_workspace.py). Users
+# upgrade by re-downloading the tarball.
 #
-# Environment variables (equivalent to flags):
-#   AGENT_WORKSPACE_REPO, AGENT_WORKSPACE_DIR, AGENT_WORKSPACE_BRANCH
+# Developers cloning the source repo should run setup.sh directly —
+# that path is unchanged and keeps the in-app Update button working.
+#
+# Flags (all forwarded to setup.sh):
+#   --non-interactive         skip the autostart / hooks prompts
+#   --autostart / --no-autostart
+#   --enable-claude-hooks / --no-claude-hooks
+#   --uninstall               remove symlinks + autostart entry
+#   --sync-repo <git-url>     opt-in state-sync repo
+#   ...                       see ./setup.sh --help for the full list
 
 set -euo pipefail
 
-REPO_URL="${AGENT_WORKSPACE_REPO:-}"
-TARGET_DIR="${AGENT_WORKSPACE_DIR:-$HOME/github/agent-workspace}"
-BRANCH="${AGENT_WORKSPACE_BRANCH:-}"
-RUN_SETUP=1
-SETUP_ARGS=()
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --repo)   REPO_URL="${2:?--repo needs a URL}"; shift 2 ;;
-    --repo=*) REPO_URL="${1#*=}"; shift ;;
-    --dir)    TARGET_DIR="${2:?--dir needs a path}"; shift 2 ;;
-    --dir=*)  TARGET_DIR="${1#*=}"; shift ;;
-    --branch) BRANCH="${2:?--branch needs a name}"; shift 2 ;;
-    --branch=*) BRANCH="${1#*=}"; shift ;;
-    --no-setup) RUN_SETUP=0; shift ;;
-    -h|--help)
-      sed -n '2,/^$/p' "$0" | sed 's/^# \?//'
-      exit 0
-      ;;
-    *) SETUP_ARGS+=("$1"); shift ;;
-  esac
+# Sanity check: the tarball should have unpacked agent_workspace.py
+# and setup.sh into the same directory as this script. If we can't
+# find them we're probably running via `curl | bash` against an old
+# bootstrap URL — point the user at the new tarball download.
+need_files=(agent_workspace.py setup.sh bin/agent-worktrees-server)
+missing=()
+for f in "${need_files[@]}"; do
+  [[ -e "${SCRIPT_DIR}/${f}" ]] || missing+=("$f")
 done
+if (( ${#missing[@]} > 0 )); then
+  cat >&2 <<EOF
+error: this install.sh expects to be run from inside an extracted
+release tarball. Missing next to the script:
 
-err()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; }
-ok()   { printf '\033[32m✓\033[0m %s\n' "$*"; }
-info() { printf '  %s\n' "$*"; }
+  $(printf '%s\n  ' "${missing[@]}")
 
-need() {
-  command -v "$1" >/dev/null 2>&1 || {
-    err "missing dependency: $1"
-    exit 1
-  }
-}
+Download the latest release, extract it, and run install.sh from
+inside the extracted directory:
 
-need git
-need python3
+  tar xzf agent-workspace-<version>.tar.gz
+  cd agent-workspace-<version>
+  ./install.sh
 
-# Python 3.10+ check — agent_workspace.py uses match/case and PEP-604 unions.
+(If you want a developer install with the in-app Update button
+wired up, clone the source repo and run ./setup.sh directly.)
+EOF
+  exit 1
+fi
+
+# Python 3.10+ check (also done by setup.sh, but a hard-fail before
+# any symlinks land gives the user a cleaner error message).
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "error: python3 not found on PATH" >&2
+  exit 1
+fi
 py_ver=$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')
 py_major=${py_ver%%.*}
 py_minor=${py_ver##*.}
 if (( py_major < 3 || (py_major == 3 && py_minor < 10) )); then
-  err "python 3.10+ required (found $py_ver)"
+  echo "error: python 3.10+ required (found $py_ver)" >&2
   exit 1
 fi
 
-if [[ -z "$REPO_URL" ]] && [[ ! -d "$TARGET_DIR/.git" ]]; then
-  err "no --repo given and $TARGET_DIR is not an existing checkout"
-  info "supply a git remote URL via --repo or AGENT_WORKSPACE_REPO"
-  info "e.g. --repo https://github.com/<your-user>/agent-workspace.git"
-  exit 1
-fi
-
-printf '\n\033[1magent-workspace installer\033[0m\n'
-[[ -n "$REPO_URL" ]] && info "repo:   $REPO_URL"
-info "target: $TARGET_DIR"
-[[ -n "$BRANCH" ]] && info "branch: $BRANCH"
-
-# Windows (Git Bash): one-time PowerShell module install for the
-# agent-event-notify desktop popups. Notify the user up front so
-# they can grant the prompt while setup.sh is still running.
-case "$(uname -s)" in
-  MINGW*|MSYS*|CYGWIN*)
-    info ""
-    info "Windows note — install the BurntToast PowerShell module once"
-    info "for desktop notifications from Claude Code hooks:"
-    info "  powershell -Command \"Install-Module -Name BurntToast -Scope CurrentUser\""
-    ;;
-esac
-printf '\n'
-
-if [[ -d "$TARGET_DIR/.git" ]]; then
-  ok "target exists — updating"
-  git -C "$TARGET_DIR" fetch --quiet origin
-  if [[ -n "$BRANCH" ]]; then
-    git -C "$TARGET_DIR" checkout --quiet "$BRANCH"
-    git -C "$TARGET_DIR" pull --quiet --ff-only origin "$BRANCH" || true
-  else
-    git -C "$TARGET_DIR" pull --quiet --ff-only || true
-  fi
-elif [[ -e "$TARGET_DIR" ]]; then
-  err "$TARGET_DIR exists and is not a git checkout — refusing to overwrite"
-  exit 1
-else
-  ok "cloning $REPO_URL"
-  mkdir -p "$(dirname "$TARGET_DIR")"
-  if [[ -n "$BRANCH" ]]; then
-    git clone --quiet --branch "$BRANCH" "$REPO_URL" "$TARGET_DIR"
-  else
-    git clone --quiet "$REPO_URL" "$TARGET_DIR"
-  fi
-fi
-
-if [[ $RUN_SETUP -eq 1 ]]; then
-  if [[ ! -x "$TARGET_DIR/setup.sh" ]]; then
-    err "$TARGET_DIR/setup.sh missing or not executable"
-    exit 1
-  fi
-  ok "running setup.sh"
-  printf '\n'
-  "$TARGET_DIR/setup.sh" "${SETUP_ARGS[@]}"
-else
-  ok "skipped setup.sh (--no-setup)"
-  info "run it later: $TARGET_DIR/setup.sh"
-fi
-
-printf '\n'
-ok "done"
-info "start the dashboard: agent-worktrees-server"
-info "                  or: $TARGET_DIR/bin/agent-worktrees-server"
+# Hand off to setup.sh — it handles the per-OS symlink / autostart
+# / completion work and runs identically for release installs and
+# developer source clones (the only difference is the pre-push git
+# hook, which setup.sh installs only when .git/ exists).
+exec "${SCRIPT_DIR}/setup.sh" "$@"

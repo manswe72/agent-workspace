@@ -734,6 +734,9 @@
       'profile.auto-update-check':       'Dashboard auto-update check',
       'profile.auto-update-check.label': 'Watch this repo for new commits on origin',
       'profile.help.auto-update-check':  'Every 10 minutes the server runs `git fetch origin` against the dashboard repo and shows a banner when there are new commits. Off hides the banner; the server stays on the version you launched. The actual pull + restart is always opt-in via the Update now button.',
+      'profile.install-mode.dev':        'Developer install — git checkout',
+      'profile.install-mode.release':    'Release install',
+      'profile.help.install-mode.release':'No git remote attached, so the in-app updater is disabled. Re-download the release tarball to upgrade.',
       'mcp.unread':                  'Unread messages',
       'mcp.send':                    'Send',
       'mcp.broadcast-option':        'Broadcast (all live issue agents)',
@@ -1307,6 +1310,9 @@
       'profile.auto-update-check':       'Uppdateringskontroll',
       'profile.auto-update-check.label': 'Bevaka repot för nya commits på origin',
       'profile.help.auto-update-check':  'Var tionde minut kör servern `git fetch origin` mot dashboard-repot och visar en banner när det finns nya commits. Av döljer bannern; servern stannar kvar på den version du startade. Själva pull + omstart sker alltid via Uppdatera nu-knappen.',
+      'profile.install-mode.dev':        'Utvecklarinstallation — git checkout',
+      'profile.install-mode.release':    'Release-installation',
+      'profile.help.install-mode.release':'Ingen git-remote kopplad, så in-app-uppdateraren är inaktiverad. Ladda ner release-tarballen igen för att uppgradera.',
       'mcp.unread':                  'Olästa meddelanden',
       'mcp.send':                    'Skicka',
       'mcp.broadcast-option':        'Broadcast (alla aktiva issue-agenter)',
@@ -2984,20 +2990,34 @@
   }
 
   function buildProfileServerPanel() {
+    // Install mode flag from /api/update/status. Pass true when the
+    // shape isn't loaded yet (initial paint) so we don't briefly
+    // grey out the toggle on a developer install.
+    const devInstall = !window.__lastState
+      || window.__lastState.update?.developer_install !== false;
     return h('div', { class: 'profile-tab-content' },
       h('div', { class: 'profile-section' },
         // Dashboard auto-update — server-level config: should we
         // periodically `git fetch origin` against the dashboard
         // repo and show a banner when there are new commits? The
         // actual pull + restart is still opt-in via the banner.
+        // On release installs (tarball without .git/) the whole
+        // mechanism is moot — the toggle is disabled and a small
+        // pill explains why.
         h('div', { class: 'profile-group' },
           h('div', { class: 'profile-section-title' },
-            t('profile.auto-update-check')),
+            t('profile.auto-update-check'),
+            devInstall
+              ? null
+              : h('span', { class: 'pill', style: {
+                    marginLeft: '0.5rem', fontSize: '11px' } },
+                  t('profile.install-mode.release'))),
           h('div', { class: 'profile-row' },
             h('label', { class: 'profile-row-control' },
               h('input', {
                 type: 'checkbox', id: 'auto-update-check-toggle',
-                checked: autoUpdateCheckOn() ? '' : null,
+                checked: (devInstall && autoUpdateCheckOn()) ? '' : null,
+                disabled: devInstall ? null : '',
                 onchange: (e) => {
                   prefs.setItem('auto-update-check',
                                 e.target.checked ? '1' : '0');
@@ -3007,7 +3027,9 @@
             ),
           ),
           h('div', { class: 'profile-help' },
-            t('profile.help.auto-update-check')),
+            devInstall
+              ? t('profile.help.auto-update-check')
+              : t('profile.help.install-mode.release')),
           // Manual restart — sibling to the auto-update toggle since
           // both control the dashboard's lifecycle. Kills every live
           // agent and respawns the server via

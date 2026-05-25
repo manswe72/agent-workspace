@@ -17,3 +17,5 @@ build-dir/
 parts/
 prime/
 stage/
+# Release tarballs produced by bin/build-release-tarball.sh
+dist/
