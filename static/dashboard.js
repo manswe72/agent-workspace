@@ -181,9 +181,17 @@
       'github.loading':         'loading…',
       'github.empty-issues':    'No open issues assigned to you.',
       'github.empty-prs':       'No open PRs.',
+      // Swedish keys — fall through to English defaults above for
+      // anything we haven't translated.
       'github.not-configured':  'No GitHub repos configured. Set the `github-repos` preference to a list of "owner/repo" strings.',
       'github.section.issues':  'Issues assigned to you',
+      'github.section.unassigned':'Open issues (no assignee)',
+      'github.empty-unassigned':'No unassigned open issues.',
       'github.section.prs':     'Open PRs',
+      'github.unassigned.add-tip': 'Claim issue #{number} in {repo} and create a workspace',
+      'github.claim.prompt':    'Assign issue #{number} in {repo} to yourself and create a workspace?\n\nOK = claim + create.\nCancel = create the workspace without claiming.',
+      'github.claim.toast.ok':  '✓ assigned to @{login}',
+      'github.claim.toast.err': 'claim failed: {error}',
       'github.col.repo':        'Repo',
       'github.col.number':      '#',
       'github.col.title':       'Title',
@@ -5871,13 +5879,15 @@
     if (btn) btn.disabled = true;
     try {
       const qs = force ? '?force=1' : '';
-      const [issuesR, prsR, prefsR] = await Promise.all([
+      const [issuesR, prsR, unassignedR, prefsR] = await Promise.all([
         fetch('/api/github/issues' + qs, { cache: 'no-store' }).then(r => r.json()),
         fetch('/api/github/prs' + qs, { cache: 'no-store' }).then(r => r.json()),
+        fetch('/api/github/issues/unassigned' + qs,
+              { cache: 'no-store' }).then(r => r.json()),
         fetch('/api/preferences', { cache: 'no-store' }).then(r => r.json()),
       ]);
       githubModalPrefs = (prefsR && prefsR.preferences) || {};
-      renderGithubModal(issuesR, prsR);
+      renderGithubModal(issuesR, prsR, unassignedR);
     } catch (err) {
       const body = document.getElementById('github-body');
       if (body) body.replaceChildren(h('div', { class: 'muted',
@@ -5943,10 +5953,11 @@
       editBtn);
   }
 
-  function renderGithubModal(issuesR, prsR) {
+  function renderGithubModal(issuesR, prsR, unassignedR) {
     const body = document.getElementById('github-body');
     if (!body) return;
-    const repos = (issuesR?.repos || prsR?.repos || []);
+    const repos = (issuesR?.repos || prsR?.repos
+                    || unassignedR?.repos || []);
     if (!repos.length) {
       body.replaceChildren(h('div', { class: 'muted',
         style: { padding: '1rem' } }, t('github.not-configured')));
@@ -5984,6 +5995,7 @@
     }
     function issueTable(rows, emptyKey, opts) {
       const isPRTable = (opts && opts.isPR) || false;
+      const isUnassigned = (opts && opts.isUnassigned) || false;
       if (!rows || !rows.length) {
         return h('div', { class: 'muted', style: { padding: '0.5rem 1rem' } },
           t(emptyKey));
@@ -6017,7 +6029,9 @@
         if (!isPRTable) {
           tds.push(githubAgentCell(existing));
           tds.push(githubModelCell(existing, it));
-          tds.push(githubActionsCell(existing, wsName, it));
+          tds.push(isUnassigned
+            ? githubUnassignedActionsCell(existing, wsName, it)
+            : githubActionsCell(existing, wsName, it));
         }
         return h('tr', {}, ...tds);
       });
@@ -6027,7 +6041,9 @@
     }
     const issues = (issuesR?.issues || []);
     const prs = (prsR?.prs || []);
-    const errs = [issuesR?.error, prsR?.error].filter(Boolean);
+    const unassigned = (unassignedR?.issues || []);
+    const errs = [issuesR?.error, prsR?.error,
+                   unassignedR?.error].filter(Boolean);
     const children = [
       h('div', { style: { padding: '0.5rem 1rem 0', fontSize: '12px' } },
         h('span', { class: 'muted' }, 'repos: '),
@@ -6041,6 +6057,10 @@
       h('h4', { style: { padding: '0.6rem 1rem 0', margin: 0 } },
         t('github.section.issues')),
       issueTable(issues, 'github.empty-issues'),
+      h('h4', { style: { padding: '0.6rem 1rem 0', margin: 0 } },
+        t('github.section.unassigned')),
+      issueTable(unassigned, 'github.empty-unassigned',
+                  { isUnassigned: true }),
       h('h4', { style: { padding: '0.6rem 1rem 0', margin: 0 } },
         t('github.section.prs')),
       issueTable(prs.map(pr => ({
@@ -6233,6 +6253,52 @@
         refreshSubmit();
       }
     }
+  }
+
+  // Actions cell for the "unassigned" section: + Add first asks the
+  // user whether to also claim the issue (assign to themselves) and
+  // then proceeds with the usual workspace-create flow. Cancel skips
+  // assignment and just adds the workspace. If the workspace already
+  // exists this falls back to the normal Remove button.
+  function githubUnassignedActionsCell(existing, wsName, it) {
+    if (existing) {
+      return githubActionsCell(existing, wsName, it);
+    }
+    return h('td', {},
+      h('button', {
+        type: 'button',
+        class: 'btn btn-inline btn-primary',
+        title: t('github.unassigned.add-tip',
+                  { number: it.number, repo: it.repo }),
+        onclick: async (e) => {
+          e.preventDefault();
+          const claim = window.confirm(
+            t('github.claim.prompt', { number: it.number,
+                                          repo: it.repo }));
+          if (claim) {
+            try {
+              const r = await fetch('/api/github/assign', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  repo: it.repo, number: it.number }),
+              });
+              const d = await r.json().catch(() => ({}));
+              if (!r.ok) throw new Error(d.error || `status ${r.status}`);
+              showToast('ok',
+                t('github.claim.toast.ok', { login: d.assigned_to }));
+            } catch (err) {
+              showToast('error',
+                t('github.claim.toast.err',
+                  { error: err.message || err }));
+              return;   // bail — don't create a workspace if claim failed
+            }
+          }
+          // Whether claimed or not, continue with the workspace
+          // create flow so the user gets the worktree they wanted.
+          openAddWorkspaceDialog(wsName, it);
+        },
+      }, t('github.action.add')));
   }
 
   function githubActionsCell(existing, wsName, _it) {

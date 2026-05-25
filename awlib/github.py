@@ -43,6 +43,7 @@ _TOKEN_FILE = HOME / ".config" / "agent-workspace" / "github-token"
 
 _PR_CACHE: dict[str, dict] = {}        # repo → {prs, ts, err}
 _ISSUE_LIST_CACHE: dict[str, dict] = {} # repo → {issues, ts, err}
+_UNASSIGNED_LIST_CACHE: dict[str, dict] = {}  # repo → {issues, ts, err}
 _ISSUE_DETAIL_CACHE: dict[tuple[str, int], tuple[float, dict | None]] = {}
 _CACHE_TTL = 5 * 60
 
@@ -70,6 +71,7 @@ def configure(repos: list[str] | None) -> None:
         # previous repos doesn't leak through.
         _PR_CACHE.clear()
         _ISSUE_LIST_CACHE.clear()
+        _UNASSIGNED_LIST_CACHE.clear()
         _ISSUE_DETAIL_CACHE.clear()
     _REPOS = new
 
@@ -310,6 +312,88 @@ def fetch_my_issues(force: bool = False) -> tuple[list[dict], str | None]:
         if err:
             errs.append(f"{repo}: {err}")
     return out, ("; ".join(errs) if errs else None)
+
+
+def _fetch_repo_unassigned_issues(repo: str, force: bool) -> tuple[list[dict], str | None]:
+    """All open issues in `repo` with no assignee. Used by the
+    Unassigned section in the GitHub modal so users can claim a
+    ticket directly from the dashboard."""
+    now = time.time()
+    entry = _UNASSIGNED_LIST_CACHE.get(repo)
+    if not force and entry and (now - entry["ts"]) < _CACHE_TTL:
+        return entry["issues"], entry["err"]
+    token = _resolve_token()
+    # `assignee=none` is GitHub's filter for unassigned issues.
+    data, err = _request(
+        f"{_API_BASE}/repos/{repo}/issues?state=open&assignee=none&per_page=100",
+        token)
+    if err:
+        _UNASSIGNED_LIST_CACHE[repo] = {"issues": [], "err": err, "ts": now}
+        return [], err
+    if not isinstance(data, list):
+        _UNASSIGNED_LIST_CACHE[repo] = {
+            "issues": [], "err": "unexpected response shape", "ts": now}
+        return [], _UNASSIGNED_LIST_CACHE[repo]["err"]
+    issues = [_shape_issue(repo, r) for r in data
+              if isinstance(r, dict) and not r.get("pull_request")]
+    _UNASSIGNED_LIST_CACHE[repo] = {"issues": issues, "err": None, "ts": now}
+    return issues, None
+
+
+def fetch_unassigned_issues(force: bool = False) -> tuple[list[dict], str | None]:
+    """Aggregate every configured repo's unassigned-issue list."""
+    if not _REPOS:
+        return [], "GitHub not configured"
+    out: list[dict] = []
+    errs: list[str] = []
+    for repo in _REPOS:
+        issues, err = _fetch_repo_unassigned_issues(repo, force)
+        out.extend(issues)
+        if err:
+            errs.append(f"{repo}: {err}")
+    return out, ("; ".join(errs) if errs else None)
+
+
+def assign_issue_to_me(repo: str, number: int) -> tuple[str | None, str | None]:
+    """Add the authenticated user to the issue's assignees list.
+    Returns (login_assigned, err). Requires a token with
+    'Issues: Write' scope (fine-grained PAT) or `repo` scope (classic
+    PAT). 403 typically means the token is missing the right scope —
+    surface that to the caller as-is."""
+    token = _resolve_token()
+    if not token:
+        return None, "no GITHUB_TOKEN — assignment needs auth"
+    login = _whoami(token)
+    if not login:
+        return None, "couldn't resolve /user — check token validity"
+    url = f"{_API_BASE}/repos/{repo}/issues/{number}/assignees"
+    body = json.dumps({"assignees": [login]}).encode("utf-8")
+    req = urllib.request.Request(url, data=body, method="POST")
+    req.add_header("Authorization", f"Bearer {token}")
+    for k, v in _COMMON_HEADERS.items():
+        req.add_header(k, v)
+    req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            # 201 Created — read but don't need the body
+            resp.read()
+        # Invalidate the unassigned cache for this repo so the dashboard
+        # doesn't re-show the just-claimed issue on next poll.
+        _UNASSIGNED_LIST_CACHE.pop(repo, None)
+        _ISSUE_LIST_CACHE.pop(repo, None)
+        return login, None
+    except urllib.error.HTTPError as ex:
+        # Surface the GitHub error message — usually says "Resource
+        # not accessible by personal access token" when the scope is
+        # wrong.
+        try:
+            payload = json.loads(ex.read().decode("utf-8", "replace"))
+            msg = payload.get("message") or str(ex)
+        except Exception:  # noqa: BLE001
+            msg = str(ex)
+        return None, f"HTTP {ex.code}: {msg}"
+    except (urllib.error.URLError, OSError, TimeoutError) as ex:
+        return None, f"network: {ex}"
 
 
 def issue_for_workspace(workspace: str) -> dict | None:

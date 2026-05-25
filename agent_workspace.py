@@ -4931,6 +4931,12 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                     "repos": _github.configured_repos(),
                 })
 
+            elif path == "/api/github/issues/unassigned":
+                force = qs.get("force", ["0"])[0] in ("1", "true", "yes")
+                items, err = _github.fetch_unassigned_issues(force=force)
+                self._send_json(200, {"issues": items, "error": err,
+                                       "repos": _github.configured_repos()})
+
             elif path == "/api/github/available-repos":
                 # All repos the user can access (owned + org-member +
                 # collaborator). Lets the Profile picker show a list
@@ -5079,6 +5085,27 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                 self._do_git_op(op, qs)
             elif parsed.path == "/api/issue/create":
                 self._do_create_issue()
+            elif parsed.path == "/api/github/assign":
+                # Body: {"repo": "owner/repo", "number": <int>}
+                # Assigns the issue to the authenticated user.
+                body = self._read_json_body() or {}
+                repo = (body.get("repo") or "").strip()
+                try:
+                    number = int(body.get("number"))
+                except (TypeError, ValueError):
+                    number = 0
+                if not repo or not number:
+                    self._send_json(400, {
+                        "error": "missing repo or number"})
+                    return
+                login, err = _github.assign_issue_to_me(repo, number)
+                if err:
+                    self._send_json(403 if "HTTP 403" in (err or "")
+                                     else 500,
+                                     {"error": err})
+                    return
+                self._send_json(200, {"assigned_to": login,
+                                       "repo": repo, "number": number})
             elif parsed.path == "/api/open-agent-tab":
                 self._do_open_claude_tab()
             elif parsed.path.startswith("/api/issue/git-op/"):
