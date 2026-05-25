@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/screenshots/dashboard.png"
+  <img src="docs/screenshots/dashboard.png?v=2"
        alt="Agent Workspace dashboard — Agent Engineering tab with workspace stats, agent picker, and embedded terminal"
        width="900">
 </p>
