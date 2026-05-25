@@ -12089,9 +12089,10 @@
       i => !(i.repos || []).every(r => r.ghost));
     const agentTooltipRows = liveIssues.map(i => {
       const st = i.agent_state || 'unknown';
+      const display = (i.display_name || '').trim();
       return h('tr', {
         class: 'hover-popover-row',
-        title: `Open ${i.issue} tab`,
+        title: `Open ${display || i.issue} tab`,
         tabindex: '0',
         onclick: () => focusIssueTab(i.issue),
         onkeydown: (e) => {
@@ -12101,7 +12102,12 @@
           }
         },
       },
-        h('td', {}, i.issue),
+        h('td', {},
+          display
+            ? h('span', { class: 'workspace-cell' },
+                h('span', {}, display),
+                h('span', { class: 'muted workspace-cell-id' }, i.issue))
+            : i.issue),
         h('td', {},
           h('span',
             { class: `agent-state-pill agent-state-${st}` }, st)),
@@ -12216,8 +12222,14 @@
             ? allIssuesList.map(i => {
                 const live = (i.repos || []).filter(
                   r => !r.ghost && !r.missing);
+                const display = (i.display_name || '').trim();
                 return issueRow([
-                  h('td', {}, i.issue),
+                  h('td', {}, display
+                    ? h('span', { class: 'workspace-cell' },
+                        h('span', {}, display),
+                        h('span', { class: 'muted workspace-cell-id' },
+                          i.issue))
+                    : i.issue),
                   h('td', {}, h('span',
                     { class: `agent-state-pill agent-state-${i.agent_state || 'unknown'}` },
                     i.agent_state || 'unknown')),

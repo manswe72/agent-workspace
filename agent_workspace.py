@@ -3919,8 +3919,28 @@ def gather_all(worktrees_root: Path, behind_limit: int, show_ghosts: bool = Fals
     # to block the Remove button until the user exits the agent so we
     # don't yank the worktree out from under a live session. live_agents
     # was already populated up top so issue_agent_state could consult it.
+    #
+    # Also attach the optional `display_name` from the workspace-names
+    # preference so popovers / dropdowns can show a friendlier label
+    # next to the canonical id. Empty string when no name is set.
+    workspace_names: dict[str, str] = {}
+    try:
+        conn = db_connect()
+        try:
+            raw_names = get_preferences(conn, _user_slug()).get(
+                "workspace-names")
+        finally:
+            conn.close()
+        if isinstance(raw_names, dict):
+            workspace_names = {
+                str(k): str(v) for k, v in raw_names.items() if v
+            }
+    except Exception:  # noqa: BLE001
+        pass
     for issue_obj in issues:
         issue_obj["agent_running"] = issue_obj["issue"] in live_agents
+        issue_obj["display_name"] = workspace_names.get(
+            issue_obj["issue"], "")
 
     # Attach GitHub issue / PR data when the integration is configured.
     # Best-effort — a network blip just leaves the fields as None.
