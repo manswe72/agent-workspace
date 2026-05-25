@@ -226,6 +226,62 @@ def _git_clone_env(url: str) -> dict[str, str]:
     return env
 
 
+def _first_configured_github_owner() -> str | None:
+    """Best-effort lookup of the GitHub owner the dashboard should
+    answer git's Username prompt with. Pulls the first slug from the
+    user's github-repos preference; falls back to None when nothing
+    is configured. The owner doesn't have to perfectly match every
+    remote — GitHub accepts any owner on the user's PAT — but using
+    the user's primary owner keeps audit logs readable."""
+    try:
+        conn = db_connect()
+        try:
+            repos = (get_preferences(conn, _user_slug()) or {}).get(
+                "github-repos")
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001
+        repos = None
+    if not isinstance(repos, list):
+        return None
+    for slug in repos:
+        if isinstance(slug, str) and "/" in slug:
+            owner = slug.split("/", 1)[0].strip()
+            if owner:
+                return owner
+    return None
+
+
+def install_global_git_credentials_env() -> None:
+    """Set GIT_ASKPASS + GIT_USERNAME + GIT_PASSWORD on the dashboard
+    process's `os.environ` so every git subprocess we spawn — fetch,
+    pull, log, the inline-terminal agent shells — inherits them.
+
+    Without this, only `git clone` (which builds its own env via
+    `_git_clone_env`) can authenticate; the dashboard's Fetch all /
+    Pull all buttons and the agents' own `git fetch` / `git push`
+    calls fall through to git's interactive credential prompt and
+    fail with "could not read Username for 'https://github.com'".
+
+    Safe re-run: also called whenever the user updates the token via
+    the Profile → GitHub flow, so a refreshed PAT takes effect on the
+    next subprocess without a dashboard restart."""
+    token = _github._resolve_token()
+    owner = _first_configured_github_owner()
+    # GIT_TERMINAL_PROMPT=0 is always safe — it just makes auth
+    # failures fast instead of hanging in the dashboard log.
+    os.environ["GIT_TERMINAL_PROMPT"] = "0"
+    if token and owner:
+        os.environ["GIT_ASKPASS"] = str(_git_askpass_helper())
+        os.environ["GIT_USERNAME"] = owner
+        os.environ["GIT_PASSWORD"] = token
+    else:
+        # No token / no configured owner — strip any stale values so
+        # we don't accidentally send wrong creds to a different host.
+        for k in ("GIT_ASKPASS", "GIT_USERNAME", "GIT_PASSWORD"):
+            os.environ.pop(k, None)
+
+
 def github_clone_url_for(user_slug: str, repo_name: str) -> str | None:
     """If the user's github-repos list contains an entry whose tail
     matches `repo_name`, return the HTTPS clone URL for it. Falls back
@@ -682,6 +738,21 @@ def _refresh_github_config() -> None:
     except Exception:  # noqa: BLE001
         pass
     _github.configure(repos)
+    # The owner answer for git's Username prompt comes from this same
+    # github-repos list, so refresh the process-wide GIT_* env vars too.
+    # Cheap (~one DB read + a couple os.environ writes); safe to run
+    # before any subprocess takes a snapshot of os.environ.
+    try:
+        install_global_git_credentials_env()
+    except NameError:
+        # Helper isn't defined yet during the import-time call from
+        # the very first module load; the explicit call from main()
+        # picks up the slack a few lines later.
+        pass
+    except Exception as ex:  # noqa: BLE001
+        log_event("warn", "github",
+                  "could not refresh git credentials env",
+                  error=str(ex))
 
 # Server runtime start timestamp — set in main(); read by /api/stats.
 _SERVER_START_TS = 0.0
@@ -6705,9 +6776,15 @@ def make_handler(worktrees_root: Path, behind_limit: int,
             if not issue:
                 self._send_json(400, {"error": "issue is required"})
                 return
-            if not re.match(r"^[A-Za-z0-9._/-]+$", issue):
+            # Reject slashes — a nested path would land at
+            # worktrees_root/<a>/<b>/<repo>/.git and the dashboard's
+            # one-level discover_repos walker would never find it,
+            # leaving the user with an invisible worktree. The Add-
+            # issue UI surfaces the same rule client-side.
+            if not re.match(r"^[A-Za-z0-9._-]+$", issue):
                 self._send_json(400, {
-                    "error": "issue must match [A-Za-z0-9._/-]+"})
+                    "error": "issue must match [A-Za-z0-9._-]+ "
+                             "(no slashes)"})
                 return
             if not isinstance(requested, list) or not requested:
                 self._send_json(400, {"error": "repos must be a non-empty list"})
@@ -7401,6 +7478,18 @@ def main(argv: list[str] | None = None) -> int:
                   "worktrees path does not exist",
                   path=str(args.worktrees))
         return 1
+
+    # Wire GIT_ASKPASS + GIT_USERNAME + GIT_PASSWORD into the dashboard
+    # process env so every git subprocess we spawn — and every agent
+    # terminal shell — can authenticate against GitHub without an
+    # interactive prompt. The token is read from
+    # ~/.config/agent-workspace/github-token (chmod 600).
+    try:
+        install_global_git_credentials_env()
+    except Exception as ex:  # noqa: BLE001
+        log_event("warn", "startup",
+                  "could not install git credentials env",
+                  error=str(ex))
 
     # Hydrate SQLite from data/*.jsonl on startup so a freshly-cloned repo
     # is functional immediately (heatmap + ghost worktrees). Skipped with

@@ -3995,6 +3995,10 @@ nav.tabs .github-pill { font-size: 10px; }
   margin: 0.3rem 0;
   font-size: 12px;
 }
+/* Wrap so the table's left edge lines up with the section <h4>
+   above it (the h4 uses padding: 0.6rem 1rem 0; mirror the same
+   horizontal inset here). */
+.github-table-wrap { padding: 0 1rem; }
 .github-table th, .github-table td {
   text-align: left;
   padding: 4px 8px;

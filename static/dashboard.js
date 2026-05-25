@@ -376,6 +376,12 @@
       'addIssue.label.issue':   'Issue',
       'addIssue.label.base':    'Branch from',
       'addIssue.label.repos':   'Repos',
+      'addIssue.label.provider':'Agent CLI',
+      'addIssue.label.model':   'Model',
+      'addIssue.help.provider': 'Which coding-agent CLI launches when you open this workspace. Default = dashboard default.',
+      'addIssue.help.model':    'Optional model override for the chosen Agent CLI. Default = the CLI\'s built-in default.',
+      'addIssue.provider.default':'(dashboard default)',
+      'addIssue.model.default': '(provider default)',
       'addIssue.help.issue':    'Any branch-safe name (`<num>-<slug>` recommended for GitHub-issue linking). If origin/<issue> already exists, the new worktree tracks it.',
       'addIssue.help.base':     'Used only when origin/<issue> does NOT exist. Resolves to a local ref first, then origin/<base>.',
       'addIssue.button.create': 'Create',
@@ -383,7 +389,7 @@
       'addIssue.button.creating':'Creating…',
       'addIssue.button.done':   'Done',
       'addIssue.warn.empty':    'Issue key is required',
-      'addIssue.warn.invalid':  'Invalid issue name',
+      'addIssue.warn.invalid':  'Invalid issue name — letters, digits, dot, underscore and hyphen only (no slashes)',
       'addIssue.warn.no-repos': 'Pick at least one repo',
       'addIssue.col.repo':      'Repo',
       'addIssue.col.result':    'Result',
@@ -924,6 +930,12 @@
       'addIssue.label.issue':   'Issue',
       'addIssue.label.base':    'Branch från',
       'addIssue.label.repos':   'Repon',
+      'addIssue.label.provider':'Agent-CLI',
+      'addIssue.label.model':   'Modell',
+      'addIssue.help.provider': 'Vilken agent-CLI som startas när workspacen öppnas. Standard = dashboardens standard.',
+      'addIssue.help.model':    'Valfri modell-override för vald agent-CLI. Standard = CLI:ets inbyggda val.',
+      'addIssue.provider.default':'(dashboard-standard)',
+      'addIssue.model.default': '(CLI-standard)',
       'addIssue.help.issue':    'Branch-säkert namn (`<num>-<slug>` rekommenderas för GitHub-issue-länkning). Om origin/<issue> redan finns spårar den nya worktreen den.',
       'addIssue.help.base':     'Används endast när origin/<issue> INTE finns. Slår upp lokal ref först, sedan origin/<base>.',
       'addIssue.button.create': 'Skapa',
@@ -931,7 +943,7 @@
       'addIssue.button.creating':'Skapar…',
       'addIssue.button.done':   'Klar',
       'addIssue.warn.empty':    'Issue-nyckel krävs',
-      'addIssue.warn.invalid':  'Ogiltigt issue-namn',
+      'addIssue.warn.invalid':  'Ogiltigt issue-namn — endast bokstäver, siffror, punkt, understreck och bindestreck (inga snedstreck)',
       'addIssue.warn.no-repos': 'Välj minst ett repo',
       'addIssue.col.repo':      'Repo',
       'addIssue.col.result':    'Resultat',
@@ -2062,8 +2074,14 @@
   // /api/preferences so the server-side github module picks up the
   // change without a restart.
   async function renderGithubReposEditor() {
-    const host = document.getElementById('github-repos-editor');
-    if (!host) return;
+    // Re-resolve the host on every write — the profile popover can be
+    // rebuilt between the function entry and the fetch completing
+    // (refreshAll runs the popover through buildProfileMenu again),
+    // leaving the captured node detached. A detached replaceChildren
+    // succeeds silently and the user is left staring at the initial
+    // "loading…" placeholder on the live node forever.
+    const findHost = () => document.getElementById('github-repos-editor');
+    if (!findHost()) return;
     let repos = [];
     try {
       const r = await fetch('/api/github/config', { cache: 'no-store' });
@@ -2080,29 +2098,6 @@
         }),
       }).then(() => refreshAll(true));
     }
-
-    const rowsHost = h('div', { class: 'github-repos-list' });
-    function paintRows() {
-      const rows = repos.map((slug, i) => h('div', { class: 'github-repos-row' },
-        h('span', { class: 'github-repos-slug' }, slug),
-        h('button', {
-          class: 'btn btn-inline btn-danger',
-          title: t('github.repos.remove-tip', { slug }),
-          onclick: async () => {
-            repos.splice(i, 1);
-            await save(repos);
-            paintRows();
-          },
-        }, '🗑'),
-      ));
-      if (!rows.length) {
-        rowsHost.replaceChildren(h('div', { class: 'muted' },
-          t('github.repos.empty')));
-      } else {
-        rowsHost.replaceChildren(...rows);
-      }
-    }
-    paintRows();
 
     async function addRepoSlug(slug) {
       const v = (slug || '').trim();
@@ -2122,16 +2117,43 @@
         showToast('error', `save failed: ${err}`);
         return false;
       }
-      paintRows();
+      paintAll();
       return true;
     }
-    const addBtn = h('button', {
-      type: 'button',
-      class: 'btn btn-inline btn-primary',
-      onclick: (e) => { e.preventDefault(); openRepoPickerDialog(addRepoSlug); },
-    }, t('github.repos.add'));
-    host.replaceChildren(rowsHost,
-      h('div', { class: 'github-repos-add' }, addBtn));
+
+    function paintAll() {
+      const host = findHost();
+      if (!host) return;
+      const rowsHost = h('div', { class: 'github-repos-list' });
+      if (!repos.length) {
+        rowsHost.append(h('div', { class: 'muted' },
+          t('github.repos.empty')));
+      } else {
+        repos.forEach((slug, i) => rowsHost.append(
+          h('div', { class: 'github-repos-row' },
+            h('span', { class: 'github-repos-slug' }, slug),
+            h('button', {
+              class: 'btn btn-inline btn-danger',
+              title: t('github.repos.remove-tip', { slug }),
+              onclick: async () => {
+                repos.splice(i, 1);
+                await save(repos);
+                paintAll();
+              },
+            }, '🗑'))));
+      }
+      const addBtn = h('button', {
+        type: 'button',
+        class: 'btn btn-inline btn-primary',
+        onclick: (e) => {
+          e.preventDefault();
+          openRepoPickerDialog(addRepoSlug);
+        },
+      }, t('github.repos.add'));
+      host.replaceChildren(rowsHost,
+        h('div', { class: 'github-repos-add' }, addBtn));
+    }
+    paintAll();
   }
 
   // Modal that fetches /api/github/available-repos and lets the user
@@ -6062,9 +6084,10 @@
         }
         return h('tr', {}, ...tds);
       });
-      return h('table', { class: 'github-table' },
-        h('thead', {}, h('tr', {}, ...ths)),
-        h('tbody', {}, ...tbody));
+      return h('div', { class: 'github-table-wrap' },
+        h('table', { class: 'github-table' },
+          h('thead', {}, h('tr', {}, ...ths)),
+          h('tbody', {}, ...tbody)));
     }
     const issues = (issuesR?.issues || []);
     const prs = (prsR?.prs || []);
@@ -6187,6 +6210,7 @@
       onclick: (e) => { if (e.target === backdrop) backdrop.remove(); } });
     const checkboxesHost = h('div', { class: 'github-pickrepos-list' },
       h('span', { class: 'muted' }, t('github.loading')));
+    const agentPickers = buildProviderModelPickers();
     const submitBtn = h('button', { class: 'btn btn-primary',
       disabled: '', onclick: () => doCreate() }, t('github.create-with', { n: 0 }));
     const modal = h('div', { class: 'logs-modal',
@@ -6201,6 +6225,12 @@
       ),
       h('div', { style: { padding: '0.8rem 1rem' } },
         checkboxesHost,
+        h('label', { class: 'add-issue-label' },
+          t('addIssue.label.provider')),
+        agentPickers.providerSel,
+        h('label', { class: 'add-issue-label' },
+          t('addIssue.label.model')),
+        agentPickers.modelSel,
         h('div', { style: { marginTop: '0.8rem', display: 'flex',
                               justifyContent: 'flex-end', gap: '0.5rem' } },
           submitBtn)),
@@ -6256,8 +6286,13 @@
 
     async function doCreate() {
       const reposList = Array.from(picked);
+      const agentChoice = agentPickers.read();
       submitBtn.disabled = '';
       submitBtn.textContent = '…';
+      // Persist agent CLI / model overrides BEFORE the server-side
+      // create runs, so the very first auto-launched session for this
+      // workspace already uses the chosen provider + model.
+      await persistWorkspaceAgentChoice(wsName, agentChoice);
       try {
         const r = await fetch('/api/issue/create', {
           method: 'POST',
@@ -7977,6 +8012,75 @@
     return out;
   }
 
+  // Build a paired Agent CLI provider + Model picker used by both
+  // Add-issue entry points (the toolbar dialog and the GitHub-modal
+  // per-issue Add dialog). Returns an object with two <select> nodes
+  // plus a `read()` function that returns `{provider, model}` —
+  // empty strings mean "use dashboard / provider default" and the
+  // caller is responsible for persisting the keys after a successful
+  // /api/issue/create.
+  function buildProviderModelPickers() {
+    const providers = (window.__providersCache || [])
+      .filter((p) => p.installed);
+    const providerSel = h('select', {
+      class: 'add-issue-input',
+      onchange: () => repopulateModels(),
+    });
+    providerSel.append(h('option', { value: '' },
+      t('addIssue.provider.default')));
+    for (const p of providers) {
+      providerSel.append(h('option', { value: p.id }, p.display_name));
+    }
+    const modelSel = h('select', { class: 'add-issue-input' });
+    function repopulateModels() {
+      const pid = providerSel.value;
+      modelSel.replaceChildren(
+        h('option', { value: '' }, t('addIssue.model.default')));
+      if (!pid) {
+        modelSel.disabled = true;
+        return;
+      }
+      modelSel.disabled = false;
+      const p = providers.find((q) => q.id === pid);
+      for (const m of (p?.models || [])) {
+        modelSel.append(h('option', { value: m },
+          m.split(':').slice(-1)[0]));
+      }
+    }
+    repopulateModels();
+    return {
+      providerSel, modelSel,
+      read: () => ({
+        provider: providerSel.value || '',
+        model:    modelSel.value || '',
+      }),
+    };
+  }
+
+  // Persist the picked provider + model under workspace-<key>-<id>
+  // keys so the per-workspace overrides (used by githubAgentCell /
+  // githubModelCell + the server-side agent argv builder) pick them
+  // up on the first launch.
+  async function persistWorkspaceAgentChoice(workspaceId, choice) {
+    if (!workspaceId || !choice) return;
+    const prefsToSet = {};
+    if (choice.provider) {
+      prefsToSet[`workspace-provider-${workspaceId}`] = choice.provider;
+    }
+    if (choice.model) {
+      prefsToSet[`workspace-model-${workspaceId}`] = choice.model;
+    }
+    if (!Object.keys(prefsToSet).length) return;
+    for (const [k, v] of Object.entries(prefsToSet)) prefs.setItem(k, v);
+    try {
+      await fetch('/api/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preferences: prefsToSet }),
+      });
+    } catch (_) {}
+  }
+
   async function openAddIssueDialog(prefillIssue, onDone) {
     document.getElementById('add-issue-dialog')?.remove();
     // Pull the latest github-repos preference each time the dialog
@@ -8005,6 +8109,7 @@
                row: h('label', { class: 'add-issue-repo-row' }, cb,
                        h('span', {}, repo)) };
     });
+    const agentPickers = buildProviderModelPickers();
     const resultsHost = h('div', { class: 'add-issue-results' });
     const close = () =>
       document.getElementById('add-issue-dialog')?.remove();
@@ -8024,16 +8129,22 @@
       if (!issue) {
         showToast('warn', t('addIssue.warn.empty')); issueInput.focus(); return;
       }
-      if (!/^[A-Za-z0-9._/-]+$/.test(issue)) {
+      if (!/^[A-Za-z0-9._-]+$/.test(issue)) {
         showToast('warn', t('addIssue.warn.invalid')); issueInput.focus(); return;
       }
       if (!repos.length) {
         showToast('warn', t('addIssue.warn.no-repos')); return;
       }
+      const agentChoice = agentPickers.read();
       submitBtn.disabled = true;
       submitBtn.textContent = t('addIssue.button.creating');
       resultsHost.replaceChildren(
         h('div', { class: 'muted' }, t('addIssue.button.creating')));
+      // Persist the per-workspace provider / model overrides *before*
+      // calling /api/issue/create so the very first agent launch (the
+      // server side adds a row only after the worktree exists) sees
+      // the picks. They're keyed by workspace id = issue key.
+      await persistWorkspaceAgentChoice(issue, agentChoice);
       try {
         const r = await fetch('/api/issue/create', {
           method: 'POST',
@@ -8155,6 +8266,16 @@
           h('label', { class: 'add-issue-label' }, t('addIssue.label.repos')),
           h('div', { class: 'add-issue-repos' },
             ...repoBoxes.map(b => b.row)),
+          h('label', { class: 'add-issue-label' },
+            t('addIssue.label.provider')),
+          agentPickers.providerSel,
+          h('div', { class: 'add-issue-help' },
+            t('addIssue.help.provider')),
+          h('label', { class: 'add-issue-label' },
+            t('addIssue.label.model')),
+          agentPickers.modelSel,
+          h('div', { class: 'add-issue-help' },
+            t('addIssue.help.model')),
           resultsHost,
         ),
         h('div', { class: 'add-issue-foot' },
@@ -9613,9 +9734,21 @@
       onclick: () => toggleAgentSearch(issue),
     }, t('agent.controls.search'));
 
-    // Fullscreen button now lives in the issue-head row alongside
-    // Pin / Remove (see headChildren above). The previous agent-
-    // controls-row copy was removed for the v2 layout.
+    // ⤢ Fullscreen — for per-issue panels this lives in the issue-head
+    // row alongside Pin / Remove. The General Agent (Agent Engineering)
+    // tab has no issue-head row, so for that panel the button stays in
+    // the controls row, immediately to the right of the search icon
+    // where it used to live before the v2 layout.
+    const fullscreenInlineBtn = isGeneral ? h('button', {
+      class: 'btn btn-inline agent-fullscreen-btn',
+      type: 'button',
+      title: t('agent.controls.fullscreen-tip'),
+      'aria-label': t('agent.controls.fullscreen-tip'),
+      onclick: (e) => {
+        e.preventDefault();
+        toggleAgentFullscreen(issue);
+      },
+    }, t('agent.controls.fullscreen')) : null;
 
     // ← → previous/next agent panel. The pinned General Agent tab
     // is part of the navigation ring too, so the user can flip
@@ -9653,6 +9786,7 @@
       openInEditorBtn,
       infoBtn,
       searchBtn,
+      fullscreenInlineBtn,
       // Prev/next sit at the far right, matching the tab-strip's
       // own ◀ / ▶ scroll affordances.
       prevBtn,
@@ -9660,9 +9794,11 @@
     );
     panel.append(controlsRow);
     panel._controlsRow = controlsRow;
-    // The fullscreen affordance now lives in the issue-head row;
-    // applyFullscreenClasses finds it by selector instead of via a
-    // panel-local ref.
+    // For per-issue panels the fullscreen affordance lives in the
+    // issue-head row (applyFullscreenClasses finds it by selector).
+    // For the General Agent panel it lives here in the controls row,
+    // so expose the local ref too.
+    if (fullscreenInlineBtn) panel._fullscreenBtn = fullscreenInlineBtn;
 
     // --- Terminal host (xterm.js attaches here when running) ---
     // CRITICAL: when an xterm is already running for this issue, we
@@ -13474,12 +13610,25 @@
     if (typeof closeGithubModal === 'function') closeGithubModal();
   }
   function _closeWeekSummary() {
-    document.getElementById('week-summary-modal')?.remove();
-    // The week summary engine also tracks its open-state in a
-    // module-level var; closing the DOM is sufficient for the demo.
+    // The week-summary backdrop id is "week-modal" (NOT
+    // "week-summary-modal"). The modal also tracks open-state in a
+    // module-level var but ripping the DOM is enough for the demo.
+    document.getElementById('week-modal')?.remove();
   }
   function _closeNotesModal() {
     document.getElementById('notes-modal')?.remove();
+  }
+  function _closeAllDemoOpened() {
+    // Defence-in-depth: when the user hits Got it / Skip / Esc, tear
+    // down every modal the tour might have opened. Each step's own
+    // after() is also called via endDemoTour for correctness, but if
+    // any individual after() ever broke we'd otherwise strand the
+    // user looking at a stuck modal.
+    _closeNotesModal();
+    _closeWeekSummary();
+    _closeGithubModal();
+    _closeAddIssueDialog();
+    _closeProfilePopover();
   }
 
   const DEMO_STEPS = [
