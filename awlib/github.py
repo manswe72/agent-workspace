@@ -1,8 +1,7 @@
 """GitHub PR client — minimal stub.
 
-Replaces the old Jira integration. Maps open PRs you authored (or
-review) onto the dashboard's workspace rows so each PR has a visible
-status pill + link, the same way Jira issues did.
+Maps open PRs you authored (or review) onto the dashboard's workspace
+rows so each PR has a visible status pill + link.
 
 Two backends are supported (auto-detected at runtime):
 
@@ -33,7 +32,7 @@ from pathlib import Path
 HOME = Path.home()
 _CONFIG_PATH = HOME / ".config" / "agent-workspace" / "github.conf"
 _CACHE: dict = {"prs": [], "ts": 0.0, "err": None}
-_CACHE_TTL = 5 * 60  # 5 minutes, same as the old Jira cache
+_CACHE_TTL = 5 * 60  # 5-minute server-side cache
 
 _log: Callable[..., None] = lambda *a, **k: None
 
