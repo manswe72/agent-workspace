@@ -775,7 +775,7 @@ case "$(uname -s)" in
 Type=Application
 Name=Agentic Engineering Workspace - Server
 GenericName=Dashboard server
-Comment=Start the Agentic Engineering Workspace dashboard server (no browser)
+Comment=Start the Agentic Engineering Workspace dashboard server and open it in a chromeless window (Chrome/Edge/Brave) or your default browser
 Exec=$LAUNCH_BIN
 Icon=$ICON_SRC
 Terminal=false

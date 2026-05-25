@@ -264,6 +264,10 @@
       'issue.open-console':     '🤖 Agent',
       'issue.open-worktree':    '↗ Open',
       'toolbar.help':           '? Help',
+      'toolbar.install-app':    '📥 Install app',
+      'toolbar.install-app-tip':'Install Agent Workspace as a standalone app (Chrome / Edge / Brave only — Firefox/Safari users add it via their browser\'s own menu).',
+      'toolbar.install-app.toast.installed':'Installed — launch from your dock / launcher.',
+      'toolbar.install-app.toast.unavailable':'Install prompt no longer available — refresh the page.',
       'tip.help':               'Open the help overlay (also: press ?)',
       'help.title':             '? Help · keyboard shortcuts and features',
       'help.section.shortcuts': 'Keyboard shortcuts',
@@ -893,6 +897,10 @@
       'issue.open-console':     '🤖 Agent',
       'issue.open-worktree':    '↗ Öppna',
       'toolbar.help':           '? Hjälp',
+      'toolbar.install-app':    '📥 Installera app',
+      'toolbar.install-app-tip':'Installera Agent Workspace som en fristående app (endast Chrome / Edge / Brave — Firefox/Safari-användare lägger till via webbläsarens egen meny).',
+      'toolbar.install-app.toast.installed':'Installerad — starta från din docka / programstartare.',
+      'toolbar.install-app.toast.unavailable':'Installations-prompt inte längre tillgänglig — ladda om sidan.',
       'tip.help':               'Öppna hjälpfönstret (genväg: ?)',
       'help.title':             '? Hjälp · tangentbordsgenvägar och funktioner',
       'help.section.shortcuts': 'Tangentbordsgenvägar',
@@ -13263,6 +13271,19 @@
           h('div', { class: 'hover-popover' },
             h('div', { class: 'hover-popover-foot' },
               t('tip.filters')))),
+        h('button', {
+          class: 'btn hover-popover-host install-app-btn',
+          id: 'install-app-btn',
+          'aria-label': t('toolbar.install-app-tip'),
+          // Hidden until the browser fires `beforeinstallprompt`.
+          // Stays hidden on Firefox / Safari (no event) and once
+          // the app is already installed (display-mode: standalone).
+          hidden: '',
+          onclick: () => triggerPwaInstall(),
+        }, t('toolbar.install-app'),
+          h('div', { class: 'hover-popover' },
+            h('div', { class: 'hover-popover-foot' },
+              t('toolbar.install-app-tip')))),
         h('button', { class: 'btn hover-popover-host help-toggle',
                       'aria-label': 'Help',
                       onclick: () => openHelpOverlay() },
@@ -15584,6 +15605,62 @@
     }
     // Refresh the dashboard to pick up the new sync timestamp.
     await refreshAll(true);
+  }
+
+  // ── PWA install prompt ────────────────────────────────────────
+  // Chromium-family browsers fire `beforeinstallprompt` when the
+  // page is install-eligible (manifest + SW + heuristics). We
+  // stash the event so the toolbar's `📥 Install app` button can
+  // surface the native install dialog on click; Firefox + Safari
+  // never fire this event so the button stays hidden there.
+  let _pwaInstallPromptEvent = null;
+  function _pwaInstallButton() {
+    return document.getElementById('install-app-btn');
+  }
+  function _pwaShowInstallButton() {
+    const btn = _pwaInstallButton();
+    if (btn) btn.removeAttribute('hidden');
+  }
+  function _pwaHideInstallButton() {
+    const btn = _pwaInstallButton();
+    if (btn) btn.setAttribute('hidden', '');
+  }
+  // Already-installed PWAs run with display-mode: standalone; the
+  // button is moot there.
+  if (window.matchMedia &&
+      window.matchMedia('(display-mode: standalone)').matches) {
+    _pwaHideInstallButton();
+  } else {
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();   // stash so we can replay on click
+      _pwaInstallPromptEvent = e;
+      _pwaShowInstallButton();
+    });
+    // After a successful install the event is consumed; hide the
+    // button so a re-installed user doesn't see it lingering.
+    window.addEventListener('appinstalled', () => {
+      _pwaInstallPromptEvent = null;
+      _pwaHideInstallButton();
+      showToast?.('ok', t('toolbar.install-app.toast.installed'));
+    });
+  }
+  async function triggerPwaInstall() {
+    const ev = _pwaInstallPromptEvent;
+    if (!ev) {
+      // Button is shown only when the event is stashed, so this
+      // path is mostly defensive (race between the event handler
+      // firing and the user clicking). Tell them what to do.
+      showToast('warn', t('toolbar.install-app.toast.unavailable'));
+      return;
+    }
+    try {
+      await ev.prompt();
+      // outcome: 'accepted' | 'dismissed' — userChoice resolves
+      // either way; we don't need to branch beyond cleanup.
+      await ev.userChoice;
+    } catch (_) {}
+    _pwaInstallPromptEvent = null;
+    _pwaHideInstallButton();
   }
 
   async function refreshAll(force = false) {

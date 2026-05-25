@@ -1,12 +1,21 @@
 #!/usr/bin/env bash
-# agent-workspace-launch — start the dashboard server.
+# agent-workspace-launch — start the dashboard server + open it.
 #
 # Used by the freedesktop launcher entry installed under
-# ~/.local/share/applications/agent-workspace.desktop. This script
-# only starts the server — it does NOT open a browser. Open the
-# dashboard with the installed PWA (or your bookmark) once the server
-# is up. If the server is already running, the script exits silently
-# (with a notification so the user knows nothing went wrong).
+# ~/.local/share/applications/agent-workspace.desktop. After spawning
+# the server it opens the dashboard in a Chromium-family browser
+# with `--app=URL` (no chrome, looks like an installed app) when
+# Chrome / Chromium / Edge / Brave / Vivaldi / Arc is on PATH,
+# falling back to xdg-open / open / start for Firefox / Safari users.
+#
+# Set DASHBOARD_NO_OPEN=1 to skip the browser launch (useful when
+# autostarted from a service manager that should not open a window).
+# Set AGENT_WORKSPACE_BROWSER=<binary> to force a specific browser
+# (must be on PATH).
+#
+# If the server is already running, the script still tries to open
+# the URL — clicking the launcher twice is a request to see the
+# dashboard, not just to ensure the server is up.
 
 PORT="${AGENT_WORKSPACE_PORT:-8765}"
 
@@ -47,35 +56,108 @@ server_running() {
   kill -0 "$pid" 2>/dev/null
 }
 
+ALREADY_RUNNING=0
 if server_running; then
   notify "Server already running" "http://127.0.0.1:${PORT}/"
-  exit 0
+  ALREADY_RUNNING=1
 fi
 
-# Spawn the server fully detached so closing the launcher process
-# (or its parent gnome-shell) doesn't take the server with it.
-SPAWN_LOG="$CACHE_DIR/launcher.${PORT}.log"
-mkdir -p "$CACHE_DIR"
-if command -v setsid >/dev/null 2>&1; then
-  setsid -f "$SERVER_BIN" --no-open --port "$PORT" \
-      >>"$SPAWN_LOG" 2>&1 < /dev/null || \
-  setsid "$SERVER_BIN" --no-open --port "$PORT" \
-      >>"$SPAWN_LOG" 2>&1 < /dev/null &
-else
-  nohup "$SERVER_BIN" --no-open --port "$PORT" \
-      >>"$SPAWN_LOG" 2>&1 < /dev/null &
-fi
-disown 2>/dev/null || true
+if (( ALREADY_RUNNING == 0 )); then
+  # Spawn the server fully detached so closing the launcher process
+  # (or its parent gnome-shell) doesn't take the server with it.
+  SPAWN_LOG="$CACHE_DIR/launcher.${PORT}.log"
+  mkdir -p "$CACHE_DIR"
+  if command -v setsid >/dev/null 2>&1; then
+    setsid -f "$SERVER_BIN" --no-open --port "$PORT" \
+        >>"$SPAWN_LOG" 2>&1 < /dev/null || \
+    setsid "$SERVER_BIN" --no-open --port "$PORT" \
+        >>"$SPAWN_LOG" 2>&1 < /dev/null &
+  else
+    nohup "$SERVER_BIN" --no-open --port "$PORT" \
+        >>"$SPAWN_LOG" 2>&1 < /dev/null &
+  fi
+  disown 2>/dev/null || true
 
-# Wait briefly for the server to come up before notifying.
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-  sleep 0.3
-  server_running && break
-done
+  # Wait briefly for the server to come up before notifying.
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 0.3
+    server_running && break
+  done
 
-if server_running; then
+  if ! server_running; then
+    notify "Server failed to start" "Check ~/.cache/agent-workspace/ logs."
+    exit 1
+  fi
   notify "Server started" "http://127.0.0.1:${PORT}/"
-else
-  notify "Server failed to start" "Check ~/.cache/agent-workspace/ logs."
-  exit 1
+fi
+
+# Open the dashboard in a chromeless window when a Chromium-family
+# browser is on PATH ("PWA install without installing"). Falls back
+# to the user's default browser otherwise — same UX as before for
+# Firefox / Safari users. Skip entirely in headless contexts
+# (DASHBOARD_NO_OPEN=1 or no DISPLAY on Linux without Wayland).
+URL="http://127.0.0.1:${PORT}/"
+SKIP_OPEN="${DASHBOARD_NO_OPEN:-0}"
+case "$(uname -s)" in
+  Linux)
+    # On Linux without a desktop session, opening anything would
+    # spawn an error popup. WAYLAND_DISPLAY catches the modern
+    # path; DISPLAY catches X.
+    if [[ -z "${WAYLAND_DISPLAY:-}" && -z "${DISPLAY:-}" ]]; then
+      SKIP_OPEN=1
+    fi
+    ;;
+esac
+if [[ "$SKIP_OPEN" != "1" ]]; then
+  find_chromium_bin() {
+    # Order: respect user override → Chrome → Chromium → Edge →
+    # Brave → Vivaldi → Arc. First hit wins.
+    if [[ -n "${AGENT_WORKSPACE_BROWSER:-}" ]]; then
+      command -v "$AGENT_WORKSPACE_BROWSER" >/dev/null 2>&1 && \
+        printf '%s\n' "$AGENT_WORKSPACE_BROWSER" && return 0
+    fi
+    local b
+    for b in \
+        google-chrome google-chrome-stable chromium chromium-browser \
+        microsoft-edge microsoft-edge-stable brave brave-browser \
+        vivaldi vivaldi-stable arc; do
+      if command -v "$b" >/dev/null 2>&1; then
+        printf '%s\n' "$b"; return 0
+      fi
+    done
+    case "$(uname -s)" in
+      Darwin)
+        # On macOS the binaries usually aren't on PATH; check the
+        # standard /Applications locations.
+        local app
+        for app in \
+            "/Applications/Google Chrome.app" \
+            "/Applications/Chromium.app" \
+            "/Applications/Microsoft Edge.app" \
+            "/Applications/Brave Browser.app" \
+            "/Applications/Vivaldi.app" \
+            "/Applications/Arc.app"; do
+          [[ -d "$app" ]] && printf 'mac:%s\n' "$app" && return 0
+        done
+        ;;
+    esac
+    return 1
+  }
+  BROWSER_BIN="$(find_chromium_bin || true)"
+  if [[ "${BROWSER_BIN}" == mac:* ]]; then
+    open -na "${BROWSER_BIN#mac:}" --args --app="$URL" \
+        >/dev/null 2>&1 &
+  elif [[ -n "${BROWSER_BIN}" ]]; then
+    "$BROWSER_BIN" --app="$URL" >/dev/null 2>&1 < /dev/null &
+    disown 2>/dev/null || true
+  else
+    # No Chromium-family browser found — fall back to the user's
+    # default. Firefox / Safari users land on a normal tab.
+    case "$(uname -s)" in
+      Linux)               xdg-open "$URL" >/dev/null 2>&1 & ;;
+      Darwin)              open "$URL" >/dev/null 2>&1 & ;;
+      MINGW*|MSYS*|CYGWIN*) start "" "$URL" >/dev/null 2>&1 & ;;
+    esac
+  fi
+  disown 2>/dev/null || true
 fi
