@@ -5443,11 +5443,13 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                 # is the dashboard's own in-process one — neither
                 # warrants a per-launch prompt.
                 _preauth_claude_project(wt, agent_mcp.SERVER_SLUG)
-            # Model selection: only honoured for the pinned General
-            # Agent today (per-workspace agents have their own external
-            # model picker). The pref's empty value means "let the agent
-            # CLI pick its default" — we forward None in that case so
-            # build_agent_argv omits the --model flag entirely.
+            # Provider + model selection, in priority order:
+            #   1. Per-workspace override (`workspace-provider-<id>` /
+            #      `workspace-model-<id>`) set from the GitHub modal.
+            #   2. Dashboard default (`default-provider`,
+            #      `general-agent-model` for the General Agent).
+            #   3. Hardcoded "claude" fallback for the provider, None
+            #      for the model (lets the CLI pick its own default).
             model_pref = None
             provider_pref = "claude"
             try:
@@ -5459,7 +5461,17 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                 raw_provider = (prefs.get("default-provider") or "").strip()
                 if raw_provider:
                     provider_pref = raw_provider
-                if issue == "__agent__":
+                # Per-workspace overrides only make sense for issue-
+                # scoped agents, not the General Agent which spans
+                # everything.
+                ws_provider = (prefs.get(f"workspace-provider-{issue}")
+                                or "").strip()
+                if ws_provider:
+                    provider_pref = ws_provider
+                ws_model = (prefs.get(f"workspace-model-{issue}") or "").strip()
+                if ws_model:
+                    model_pref = ws_model
+                elif issue == "__agent__":
                     raw = prefs.get("general-agent-model") or ""
                     if raw and raw != "default":
                         model_pref = raw

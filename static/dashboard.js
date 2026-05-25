@@ -189,8 +189,10 @@
       'github.col.title':       'Title',
       'github.col.state':       'State',
       'github.col.workspace':   'Workspace',
+      'github.col.agent':       'Agent',
       'github.col.model':       'Model',
       'github.col.actions':     'Actions',
+      'github.agent.use-default': 'Use default',
       'github.has-workspace':   '✓ exists',
       'github.no-workspace':    '—',
       'github.set-name':        'Set display name',
@@ -5597,6 +5599,7 @@
         h('th', {}, t('github.col.workspace')),
       ];
       if (!isPRTable) {
+        ths.push(h('th', {}, t('github.col.agent')));
         ths.push(h('th', {}, t('github.col.model')));
         ths.push(h('th', {}, t('github.col.actions')));
       }
@@ -5615,6 +5618,7 @@
           h('td', {}, workspaceCell(existing)),
         ];
         if (!isPRTable) {
+          tds.push(githubAgentCell(existing));
           tds.push(githubModelCell(existing, it));
           tds.push(githubActionsCell(existing, wsName, it));
         }
@@ -5651,40 +5655,77 @@
   }
 
   // Per-issue Model picker shown in the GitHub modal table. Only
-  // meaningful for an existing workspace (the model override is keyed
-  // on the workspace folder name); when no workspace exists, the cell
-  // shows a muted dash. Currently only Claude Code surfaces models in
-  // the dashboard's pref schema; other providers may add their own
-  // model lists later — falling back to "use default" keeps the cell
-  // useful even when the active provider is non-Claude.
-  function githubModelCell(workspace, _it) {
+  // Saves a per-workspace preference and POSTs it server-side. Null
+  // value (or empty string) clears the key.
+  function persistPref(key, value) {
+    if (value) prefs.setItem(key, value);
+    else prefs.removeItem(key);
+    return fetch('/api/preferences', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ preferences: { [key]: value || null } }),
+    }).catch(() => {});
+  }
+
+  // Per-workspace **Agent CLI** picker. Defaults to "use default"
+  // (empty pref → falls back to the dashboard's default-provider pref).
+  // Options come from /api/providers; only installed providers are
+  // selectable. Stored under `workspace-provider-<id>`.
+  function githubAgentCell(workspace) {
     if (!workspace) return h('td', { class: 'muted' }, '—');
-    const prefKey = `workspace-model-${workspace}`;
+    const prefKey = `workspace-provider-${workspace}`;
     const current = (prefs.getItem(prefKey) || '').trim();
-    const choices = [
-      { v: '',                    label: 'Use default' },
-      { v: 'claude-opus-4-7',     label: 'Opus 4.7' },
-      { v: 'claude-sonnet-4-6',   label: 'Sonnet 4.6' },
-      { v: 'claude-haiku-4-5',    label: 'Haiku 4.5' },
-    ];
+    const providers = window.__providersCache || [];
     const sel = h('select', {
       class: 'github-model-select',
-      title: 'Per-workspace model override',
-      onchange: async (e) => {
-        const v = e.target.value;
-        prefs.setItem(prefKey, v);
-        try {
-          await fetch('/api/preferences', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ preferences: { [prefKey]: v || null } }),
-          });
-        } catch (_) {}
-      },
-    }, ...choices.map(c => h('option', {
-      value: c.v,
-      selected: (c.v === current) ? '' : null,
-    }, c.label)));
+      title: 'Per-workspace agent CLI override',
+      onchange: (e) => persistPref(prefKey, e.target.value).then(() => {
+        // Re-render so the Model cell reflects the new provider's
+        // models. Cheap — just reload the modal.
+        loadGithub(false);
+      }),
+    });
+    sel.append(h('option', {
+      value: '', selected: (current === '') ? '' : null,
+    }, t('github.agent.use-default')));
+    for (const p of providers) {
+      if (!p.installed) continue;
+      sel.append(h('option', {
+        value: p.id,
+        selected: (p.id === current) ? '' : null,
+      }, p.display_name));
+    }
+    return h('td', {}, sel);
+  }
+
+  // Per-workspace **Model** picker. Always populated from whichever
+  // provider is active for this workspace — either the per-workspace
+  // override or the dashboard default. Stored under
+  // `workspace-model-<id>`.
+  function githubModelCell(workspace) {
+    if (!workspace) return h('td', { class: 'muted' }, '—');
+    const providerKey = `workspace-provider-${workspace}`;
+    const providerId = (prefs.getItem(providerKey)
+      || prefs.getItem('default-provider') || 'claude').trim();
+    const provider = (window.__providersCache || [])
+      .find(p => p.id === providerId);
+    if (!provider || !(provider.models || []).length) {
+      return h('td', { class: 'muted' },
+        t('github.agent.use-default'));
+    }
+    const prefKey = `workspace-model-${workspace}`;
+    const current = (prefs.getItem(prefKey) || '').trim();
+    const sel = h('select', {
+      class: 'github-model-select',
+      title: `Per-workspace model override (for ${provider.display_name})`,
+      onchange: (e) => persistPref(prefKey, e.target.value),
+    },
+      h('option', { value: '', selected: (current === '') ? '' : null },
+        t('github.agent.use-default')),
+      ...provider.models.map(m => h('option', {
+        value: m, selected: (m === current) ? '' : null,
+      }, m.split(':').slice(-1)[0]))
+    );
     return h('td', {}, sel);
   }
 
