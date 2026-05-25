@@ -208,6 +208,24 @@ def _github_owner_from_url(url: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _github_slug_from_url(url: str) -> str | None:
+    """Pull the <owner>/<repo> slug out of a GitHub HTTPS or SSH
+    clone URL. Returns None when it doesn't look like a GitHub URL.
+    Used by the Create PR flow to figure out which repo on
+    api.github.com to POST against."""
+    if not url:
+        return None
+    s = url.strip()
+    m = re.match(
+        r"^https?://(?:[^@]+@)?github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", s)
+    if m:
+        return f"{m.group(1)}/{m.group(2)}"
+    m = re.match(r"^git@github\.com:([^/]+)/([^/]+?)(?:\.git)?$", s)
+    if m:
+        return f"{m.group(1)}/{m.group(2)}"
+    return None
+
+
 def _git_clone_env(url: str) -> dict[str, str]:
     """Build the environment for a `git clone` subprocess. For
     https://github.com/... URLs with a token configured, wires
@@ -5390,6 +5408,8 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                     return
                 self._send_json(200, {"assigned_to": login,
                                        "repo": repo, "number": number})
+            elif parsed.path == "/api/github/pr/create":
+                self._do_create_pr()
             elif parsed.path == "/api/open-agent-tab":
                 self._do_open_claude_tab()
             elif parsed.path.startswith("/api/issue/git-op/"):
@@ -7077,6 +7097,95 @@ def make_handler(worktrees_root: Path, behind_limit: int,
             })
             # Schedule the self-restart AFTER the response is on the wire.
             schedule_self_restart(delay_seconds=0.7)
+
+        def _do_create_pr(self):
+            """Open a GitHub pull request for every repo under a given
+            workspace. Body:
+              {
+                "issue":  "<workspace-id>",     # required
+                "base":   "main",               # optional, default main
+                "title":  "<text>",             # optional, default issue
+                "body":   "<markdown>",         # optional
+                "draft":  false                 # optional
+              }
+            For each repo we push the workspace's branch to origin
+            (set-upstream so the next push is bare `git push`), then
+            POST /repos/<owner>/<repo>/pulls. Returns a 200 with a
+            list of per-repo results — UI surfaces the success rows
+            with PR URLs and the failure rows with the error message
+            verbatim (typically "A pull request already exists for
+            X:branch" or a permissions HTTP 403)."""
+            from awlib import github as _github_mod
+            body = self._read_json_body() or {}
+            issue = (body.get("issue") or "").strip()
+            base = (body.get("base") or "main").strip() or "main"
+            title = (body.get("title") or "").strip() or issue
+            pr_body = body.get("body") or ""
+            draft = bool(body.get("draft"))
+            if not issue:
+                self._send_json(400, {"error": "issue is required"})
+                return
+            issue_dir = worktrees_root / issue
+            if not issue_dir.is_dir():
+                self._send_json(404, {
+                    "error": f"no workspace at {issue_dir}"})
+                return
+            results: list[dict] = []
+            for wt in discover_repos(issue_dir):
+                # Resolve the GitHub slug. SSH and HTTPS clones are
+                # both handled — for non-GitHub remotes we skip with
+                # a clear error (the API only knows how to call
+                # api.github.com).
+                remote = subprocess.run(
+                    ["git", "-C", str(wt), "config",
+                     "--get", "remote.origin.url"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                slug = _github_slug_from_url(
+                    (remote.stdout or "").strip())
+                if not slug:
+                    results.append({
+                        "repo": wt.name, "ok": False,
+                        "action": "skip",
+                        "message": "remote.origin.url is not a "
+                                   "GitHub URL"})
+                    continue
+                # Push the branch first. --set-upstream wires the
+                # local branch to origin/<branch> so subsequent
+                # `git push` from the agent's shell works bare.
+                push = subprocess.run(
+                    ["git", "-C", str(wt), "push",
+                     "--set-upstream", "origin", issue],
+                    capture_output=True, text=True, timeout=60,
+                )
+                if push.returncode != 0:
+                    results.append({
+                        "repo": wt.name, "slug": slug, "ok": False,
+                        "action": "push-failed",
+                        "message": (push.stderr or push.stdout or
+                                     "").strip()})
+                    continue
+                pr, err = _github_mod.create_pr(
+                    slug, head=issue, base=base,
+                    title=title, body=pr_body, draft=draft)
+                if err:
+                    results.append({
+                        "repo": wt.name, "slug": slug, "ok": False,
+                        "action": "create-failed",
+                        "message": err})
+                    continue
+                results.append({
+                    "repo": wt.name, "slug": slug, "ok": True,
+                    "action": "created",
+                    "number": (pr or {}).get("number"),
+                    "url": (pr or {}).get("url"),
+                    "draft": (pr or {}).get("draft", False),
+                })
+            ok = all(r["ok"] for r in results) and bool(results)
+            status = 200 if ok else (207 if results else 500)
+            self._send_json(status, {"issue": issue,
+                                       "base": base,
+                                       "results": results})
 
         def _do_remove_issue(self):
             body = self._read_json_body() or {}

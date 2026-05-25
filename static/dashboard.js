@@ -372,6 +372,22 @@
       'notes.due.today':        'today',
       'notes.due.tomorrow':     'tomorrow',
       // Add-issue dialog
+      'pr.create.btn':          '⊕ Create PR',
+      'pr.create.tip':          'Open a pull request from this workspace\'s branch into the chosen base branch. Pushes the branch first, then POSTs /repos/<repo>/pulls.',
+      'pr.create.title':        'Create pull request',
+      'pr.create.label.title':  'Title',
+      'pr.create.label.base':   'Base branch',
+      'pr.create.label.body':   'Description (markdown)',
+      'pr.create.label.draft':  'Open as draft',
+      'pr.create.btn.submit':   'Open PR',
+      'pr.create.btn.cancel':   'Cancel',
+      'pr.create.btn.creating': 'Creating…',
+      'pr.create.warn.empty-title':'Title is required',
+      'pr.create.toast.ok':     '✓ {repo} #{number}',
+      'pr.create.toast.err':    '{repo}: {error}',
+      'pr.create.col.repo':     'Repo',
+      'pr.create.col.result':   'Result',
+      'pr.create.col.url':      'PR',
       'addIssue.title':         '+ Add issue',
       'addIssue.label.issue':   'Issue',
       'addIssue.label.base':    'Branch from',
@@ -937,6 +953,22 @@
       'notes.due.overdue':      'försenad',
       'notes.due.today':        'idag',
       'notes.due.tomorrow':     'imorgon',
+      'pr.create.btn':          '⊕ Skapa PR',
+      'pr.create.tip':          'Öppna en pull request från denna workspace-branch in i vald basgren. Pushar branchen först, sedan POSTar /repos/<repo>/pulls.',
+      'pr.create.title':        'Skapa pull request',
+      'pr.create.label.title':  'Titel',
+      'pr.create.label.base':   'Basgren',
+      'pr.create.label.body':   'Beskrivning (markdown)',
+      'pr.create.label.draft':  'Öppna som utkast',
+      'pr.create.btn.submit':   'Öppna PR',
+      'pr.create.btn.cancel':   'Avbryt',
+      'pr.create.btn.creating': 'Skapar…',
+      'pr.create.warn.empty-title':'Titel krävs',
+      'pr.create.toast.ok':     '✓ {repo} #{number}',
+      'pr.create.toast.err':    '{repo}: {error}',
+      'pr.create.col.repo':     'Repo',
+      'pr.create.col.result':   'Resultat',
+      'pr.create.col.url':      'PR',
       'addIssue.title':         '+ Lägg till issue',
       'addIssue.label.issue':   'Issue',
       'addIssue.label.base':    'Branch från',
@@ -8242,6 +8274,169 @@
     } catch (_) {}
   }
 
+  // Modal for "Create PR" from an issue's workspace branch. POSTs
+  // /api/github/pr/create on submit, then renders per-repo results
+  // inline (PR url on success, full error text on failure). The
+  // server pushes the branch with --set-upstream before opening the
+  // PR, so the user doesn't have to remember to push manually.
+  function openCreatePrDialog(issueObj) {
+    document.getElementById('create-pr-dialog')?.remove();
+    const issue = issueObj.issue;
+    const titleInput = h('input', {
+      type: 'text', class: 'add-issue-input', autocomplete: 'off',
+      value: issue, style: { width: '100%' },
+    });
+    const baseInput = h('input', {
+      type: 'text', class: 'add-issue-input', autocomplete: 'off',
+      placeholder: 'main', value: 'main',
+    });
+    const bodyInput = h('textarea', {
+      class: 'add-issue-input', rows: '5',
+      placeholder: '',
+      style: { width: '100%', minHeight: '7rem',
+                fontFamily: 'inherit' },
+    });
+    const draftInput = h('input', { type: 'checkbox' });
+    const resultsHost = h('div', { class: 'add-issue-results' });
+
+    const close = () =>
+      document.getElementById('create-pr-dialog')?.remove();
+    let buttonMode = 'create';
+    const submit = async () => {
+      const title = titleInput.value.trim();
+      const base  = baseInput.value.trim() || 'main';
+      const body  = bodyInput.value;
+      const draft = !!draftInput.checked;
+      if (!title) {
+        showToast('warn', t('pr.create.warn.empty-title'));
+        titleInput.focus();
+        return;
+      }
+      submitBtn.disabled = true;
+      submitBtn.textContent = t('pr.create.btn.creating');
+      resultsHost.replaceChildren(
+        h('div', { class: 'muted' }, t('pr.create.btn.creating')));
+      try {
+        const r = await fetch('/api/github/pr/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ issue, base, title, body, draft }),
+        });
+        const d = await r.json().catch(() => ({}));
+        const results = Array.isArray(d.results) ? d.results : [];
+        if (!results.length) {
+          showToast('error', d.error || `status ${r.status}`);
+          submitBtn.disabled = false;
+          submitBtn.textContent = t('pr.create.btn.submit');
+          resultsHost.replaceChildren();
+          return;
+        }
+        resultsHost.replaceChildren(
+          h('table', { class: 'hover-popover-table',
+                        style: { width: '100%' } },
+            h('thead', {}, h('tr', {},
+              h('th', {}, t('pr.create.col.repo')),
+              h('th', {}, t('pr.create.col.result')),
+              h('th', {}, t('pr.create.col.url')),
+            )),
+            h('tbody', {},
+              ...results.map(rr => h('tr', {},
+                h('td', {}, rr.repo),
+                h('td', {},
+                  h('span', {
+                    class: 'pill ' + (rr.ok ? 'clean' : 'unpushed'),
+                  }, rr.ok
+                       ? '✓ ' + (rr.draft ? 'draft' : 'opened')
+                       : '✗ ' + (rr.action || 'failed'))),
+                h('td', { style: { whiteSpace: 'pre-wrap' } },
+                  rr.ok
+                    ? h('a', { href: rr.url, target: '_blank',
+                                rel: 'noopener noreferrer' },
+                        '#' + rr.number)
+                    : (rr.message || '')),
+              )),
+            ),
+          ),
+        );
+        const ok = results.filter(rr => rr.ok);
+        ok.forEach(rr => showToast('ok',
+          t('pr.create.toast.ok',
+            { repo: rr.repo, number: rr.number })));
+        results.filter(rr => !rr.ok).forEach(rr => showToast('error',
+          t('pr.create.toast.err',
+            { repo: rr.repo, error: rr.message || rr.action })));
+        refreshAll(true);
+        submitBtn.disabled = false;
+        if (ok.length === results.length) {
+          submitBtn.textContent = t('btn.close');
+          buttonMode = 'close';
+          cancelBtn.disabled = true;
+        } else {
+          submitBtn.textContent = t('pr.create.btn.submit');
+          buttonMode = 'create';
+        }
+      } catch (err) {
+        showToast('error', `create failed: ${err}`);
+        submitBtn.disabled = false;
+        submitBtn.textContent = t('pr.create.btn.submit');
+        buttonMode = 'create';
+      }
+    };
+    const submitBtn = h('button', {
+      class: 'btn btn-primary',
+      onclick: () => {
+        if (buttonMode === 'create') submit();
+        else if (buttonMode === 'close') close();
+      },
+    }, t('pr.create.btn.submit'));
+    const cancelBtn = h('button', { class: 'btn', onclick: close },
+      t('pr.create.btn.cancel'));
+
+    const dialog = h('div', { class: 'logs-modal-backdrop',
+                                id: 'create-pr-dialog',
+                                onclick: (e) => {
+                                  if (e.target.id === 'create-pr-dialog') close();
+                                } },
+      h('div', { class: 'logs-modal add-issue-modal',
+                  role: 'dialog',
+                  onclick: (e) => e.stopPropagation() },
+        h('div', { class: 'logs-modal-head' },
+          h('strong', {}, t('pr.create.title')),
+          h('span', { class: 'muted' }, ' · ', issue),
+          h('span', { style: { flex: '1' } }),
+          h('button', { class: 'btn btn-inline', onclick: close,
+                        'aria-label': 'Close', title: 'Close' }, '✕'),
+        ),
+        h('div', { class: 'add-issue-body' },
+          h('label', { class: 'add-issue-label' },
+            t('pr.create.label.title')),
+          titleInput,
+          h('label', { class: 'add-issue-label' },
+            t('pr.create.label.base')),
+          baseInput,
+          h('label', { class: 'add-issue-label' },
+            t('pr.create.label.body')),
+          bodyInput,
+          h('label', { class: 'add-issue-repo-row' },
+            draftInput, h('span', {}, t('pr.create.label.draft'))),
+          resultsHost,
+        ),
+        h('div', { class: 'add-issue-foot' },
+          cancelBtn, submitBtn,
+        ),
+      ),
+    );
+    document.body.append(dialog);
+    function esc(e) {
+      if (e.key === 'Escape') {
+        close();
+        document.removeEventListener('keydown', esc);
+      }
+    }
+    document.addEventListener('keydown', esc);
+    setTimeout(() => titleInput.focus(), 0);
+  }
+
   async function openAddIssueDialog(prefillIssue, onDone) {
     document.getElementById('add-issue-dialog')?.remove();
     // Pull the latest github-repos preference each time the dialog
@@ -9390,6 +9585,19 @@
         h('div', { class: 'hover-popover' },
           h('div', { class: 'hover-popover-foot' },
             `Run \`git pull --ff-only\` in every repo under ${issueObj.issue}. Aborts cleanly on divergence.`)),
+      ),
+      h('button', {
+        class: 'btn issue-git-btn issue-pr-btn hover-popover-host',
+        type: 'button',
+        'aria-label': t('pr.create.tip'),
+        onclick: (e) => {
+          e.preventDefault();
+          openCreatePrDialog(issueObj);
+        },
+      }, t('pr.create.btn'),
+        h('div', { class: 'hover-popover' },
+          h('div', { class: 'hover-popover-foot' },
+            t('pr.create.tip'))),
       ),
     ));
 

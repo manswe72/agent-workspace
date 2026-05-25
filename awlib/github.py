@@ -431,6 +431,59 @@ def assign_issue_to_me(repo: str, number: int) -> tuple[str | None, str | None]:
         return None, f"network: {ex}"
 
 
+def create_pr(repo: str, head: str, base: str, title: str,
+              body: str = "", draft: bool = False
+              ) -> tuple[dict | None, str | None]:
+    """Open a pull request from `head` → `base` in `repo`. Returns
+    ({number, url}, None) on success or (None, err_message) on
+    failure. The caller is responsible for ensuring the head branch
+    is already pushed to origin — GitHub rejects the request with a
+    422 otherwise. Token needs `pull_requests:write` (fine-grained
+    PAT) or `repo` (classic PAT)."""
+    token = _resolve_token()
+    if not token:
+        return None, "no GITHUB_TOKEN — create_pr needs auth"
+    url = f"{_API_BASE}/repos/{repo}/pulls"
+    payload = json.dumps({
+        "title": title, "body": body or "",
+        "head": head, "base": base,
+        "draft": bool(draft),
+    }).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, method="POST")
+    req.add_header("Authorization", f"Bearer {token}")
+    for k, v in _COMMON_HEADERS.items():
+        req.add_header(k, v)
+    req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as ex:
+        try:
+            payload = json.loads(ex.read().decode("utf-8", "replace"))
+            # GitHub returns a structured error list — surface the
+            # first message so users see "A pull request already
+            # exists for X:branch" instead of just "HTTP 422".
+            errs = payload.get("errors") or []
+            if errs and isinstance(errs[0], dict):
+                msg = errs[0].get("message") or payload.get("message")
+            else:
+                msg = payload.get("message") or str(ex)
+        except Exception:  # noqa: BLE001
+            msg = str(ex)
+        return None, f"HTTP {ex.code}: {msg}"
+    except (urllib.error.URLError, OSError, TimeoutError) as ex:
+        return None, f"network: {ex}"
+    # Invalidate the per-repo PR list cache so the GitHub modal picks
+    # up the new PR on next render without a manual force-refresh.
+    _PR_CACHE.pop(repo, None)
+    return {
+        "number": data.get("number"),
+        "url": data.get("html_url"),
+        "state": data.get("state"),
+        "draft": bool(data.get("draft")),
+    }, None
+
+
 def issue_for_workspace(workspace: str) -> dict | None:
     """The GitHub issue a workspace maps to. Tries every configured repo
     in order, returning the first hit. None when the workspace name
