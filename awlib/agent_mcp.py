@@ -414,6 +414,27 @@ TOOLS = [
             "required": ["text"],
         },
     },
+    {
+        "name": "list_agents",
+        "description": (
+            "List every agent the dashboard currently knows about: "
+            "each workspace under the worktrees root plus the pinned "
+            "General Agent ('__agent__'). Each entry includes the "
+            "canonical id, an optional human-friendly display name "
+            "(when the user set one), and a session state of "
+            "'active', 'idle', or 'closed' based on the launcher's "
+            "marker / session log. Useful before send_message so you "
+            "can pick a recipient that's actually online."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "live_only": {"type": "boolean",
+                               "description":
+                                  "Skip closed agents. Default false."},
+            },
+        },
+    },
 ]
 
 
@@ -443,12 +464,20 @@ class McpServer:
     """
 
     def __init__(self, db_connect, *,
-                  known_agents=None, live_agents=None):
+                  known_agents=None, live_agents=None,
+                  agents_info=None, resolve_alias=None):
         # db_connect: zero-arg callable that returns a fresh
         # sqlite3.Connection. The handler closes it after each call.
+        # agents_info() → list of {id, name, state} dicts powering
+        #   the list_agents MCP tool.
+        # resolve_alias(name) → canonical id, or None. Lets agents
+        #   address each other by friendly display name (set in the
+        #   dashboard's workspace-names pref).
         self._db = db_connect
         self._known_agents = known_agents
         self._live_agents = live_agents or (lambda: [])
+        self._agents_info = agents_info or (lambda: [])
+        self._resolve_alias = resolve_alias or (lambda _name: None)
 
     def dispatch(self, agent: str, req: dict) -> dict:
         """Handle one JSON-RPC request. Returns the response object.
@@ -495,6 +524,8 @@ class McpServer:
                 text = self._tool_request_review(agent, args)
             elif name == "broadcast_message":
                 text = self._tool_broadcast_message(agent, args)
+            elif name == "list_agents":
+                text = self._tool_list_agents(args)
             else:
                 return self._err(rpc_id, -32602, f"unknown tool: {name}")
         except ValueError as ex:
@@ -510,23 +541,32 @@ class McpServer:
             "content": [{"type": "text", "text": text}],
         })
 
-    def _validate_recipient(self, to: str) -> None:
-        """Reject typos / dead recipients: the `to` agent must
-        appear in the HTTP layer's known-agent set when one is
-        configured. Falls open (no check) when no callback was
-        wired — keeps the unit tests + smoke scripts simple."""
+    def _resolve_recipient(self, to: str) -> str:
+        """Canonical-ID resolution: agents can address each other by
+        the workspace id (`1-fix-auth`) OR a custom display name set
+        in the dashboard's `workspace-names` preference (`Alice`).
+        Returns the canonical id used for DB inserts. Raises
+        ValueError on typos / dead recipients.
+        """
         if self._known_agents is None:
-            return
+            return to  # smoke-test mode — fall open
         try:
             known = self._known_agents()
         except Exception:  # noqa: BLE001 — never crash the dispatcher
-            return
-        if known and to not in known:
-            sample = sorted(known)
-            if len(sample) > 6:
-                sample = sample[:6] + ["…"]
-            raise ValueError(
-                f"unknown agent: {to!r}. Known: {', '.join(sample)}")
+            return to
+        if to in known:
+            return to
+        try:
+            alias = self._resolve_alias(to)
+        except Exception:  # noqa: BLE001
+            alias = None
+        if alias and alias in known:
+            return alias
+        sample = sorted(known)
+        if len(sample) > 6:
+            sample = sample[:6] + ["…"]
+        raise ValueError(
+            f"unknown agent: {to!r}. Known: {', '.join(sample)}")
 
     def _tool_send_message(self, agent: str, args: dict) -> str:
         to = (args.get("to") or "").strip()
@@ -542,17 +582,19 @@ class McpServer:
             except (TypeError, ValueError) as ex:
                 raise ValueError(
                     "`in_reply_to` must be an integer id") from ex
-        self._validate_recipient(to)
+        canonical = self._resolve_recipient(to)
         conn = self._db()
         try:
-            mid = send_message(conn, agent, to, "message", {"text": text},
+            mid = send_message(conn, agent, canonical, "message",
+                                {"text": text},
                                 in_reply_to=in_reply_to)
         finally:
             conn.close()
+        suffix = "" if canonical == to else f" ({canonical!r})"
         if in_reply_to:
-            return (f"sent message #{mid} to {to} "
+            return (f"sent message #{mid} to {to}{suffix} "
                     f"(reply to #{in_reply_to})")
-        return f"sent message #{mid} to {to}"
+        return f"sent message #{mid} to {to}{suffix}"
 
     def _tool_broadcast_message(self, agent: str, args: dict) -> str:
         """Send `text` to every live agent except the General Agent
@@ -607,9 +649,10 @@ class McpServer:
             raise ValueError("missing `target`")
         if not ref:
             raise ValueError("missing `ref`")
+        canonical = self._resolve_recipient(target)
         conn = self._db()
         try:
-            mid = send_message(conn, agent, target, "review_request",
+            mid = send_message(conn, agent, canonical, "review_request",
                                 {"ref": ref, "context": context,
                                  "text": (f"Please review {ref}"
                                           + (f" — {context}" if context
@@ -617,6 +660,18 @@ class McpServer:
         finally:
             conn.close()
         return f"sent review_request #{mid} to {target} for ref={ref}"
+
+    def _tool_list_agents(self, args: dict) -> str:
+        live_only = bool(args.get("live_only", False))
+        try:
+            agents = self._agents_info()
+        except Exception as ex:  # noqa: BLE001
+            raise ValueError(f"could not enumerate agents: {ex}") from ex
+        if live_only:
+            agents = [a for a in agents if a.get("state") == "active"]
+        if not agents:
+            return "no agents"
+        return json.dumps(agents, indent=2, default=str)
 
     # ── helpers ─────────────────────────────────────────────────
 

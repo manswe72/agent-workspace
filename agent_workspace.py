@@ -5751,10 +5751,62 @@ def make_handler(worktrees_root: Path, behind_limit: int,
             def _live_agents():
                 return [s.issue for s in agentterm.iter_sessions()]
 
+            def _workspace_names_pref() -> dict[str, str]:
+                """Read the `workspace-names` preference (a dict of
+                workspace_id → friendly name) so the MCP layer can
+                resolve aliases. Empty dict on any failure."""
+                try:
+                    conn = db_connect()
+                    try:
+                        raw = get_preferences(conn, _user_slug()).get(
+                            "workspace-names")
+                    finally:
+                        conn.close()
+                    if isinstance(raw, dict):
+                        return {str(k): str(v) for k, v in raw.items() if v}
+                except Exception:  # noqa: BLE001
+                    pass
+                return {}
+
+            def _resolve_alias(name: str) -> str | None:
+                """name → canonical workspace id. Falls back to None
+                when no display name matches."""
+                names = _workspace_names_pref()
+                for ws_id, friendly in names.items():
+                    if friendly == name:
+                        return ws_id
+                return None
+
+            def _agents_info() -> list[dict]:
+                """Powers the list_agents MCP tool. One dict per known
+                agent with id, optional display name, and a live-state
+                hint pulled from the current provider's session probe."""
+                names = _workspace_names_pref()
+                live = set(_live_agents())
+                out: list[dict] = []
+                # General Agent first — it's the dashboard's pinned tab.
+                out.append({
+                    "id": "__agent__",
+                    "name": names.get("__agent__") or "General Agent",
+                    "state": "active" if "__agent__" in live else "closed",
+                })
+                if worktrees_root.is_dir():
+                    for p in sorted(worktrees_root.iterdir()):
+                        if not p.is_dir() or p.name.startswith("."):
+                            continue
+                        out.append({
+                            "id": p.name,
+                            "name": names.get(p.name) or "",
+                            "state": "active" if p.name in live else "closed",
+                        })
+                return out
+
             srv = agent_mcp.McpServer(
                 db_connect,
                 known_agents=_known_agents,
-                live_agents=_live_agents)
+                live_agents=_live_agents,
+                agents_info=_agents_info,
+                resolve_alias=_resolve_alias)
             response = srv.dispatch(agent, body)
             # If this was a tools/call that may have inserted a new
             # row in agent_messages (send_message / request_review),

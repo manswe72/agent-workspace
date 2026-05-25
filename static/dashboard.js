@@ -1386,23 +1386,41 @@
     return out;
   }
 
-  // Build a gitweb commit URL. The gitweb base is read from the
-  // user pref `gitweb-base-url` (e.g. "https://git.example.com/git/")
-  // — when unset, gitweb links are suppressed entirely. The URL
-  // shape follows the standard gitweb format:
-  //   <base>?p=<remote-path>.git;a=commit;h=<full-sha>
-  // remotePath comes from the server (parsed from `git config
-  // remote.origin.url`).
+  // Build a commit URL for a given repo's SHA. Priority:
+  //   1. GitHub remote — auto-detected from the remote URL. Emits
+  //      https://github.com/<owner>/<repo>/commit/<sha>. Works
+  //      without any user config.
+  //   2. Other gitweb host — falls back to the user pref
+  //      `gitweb-base-url` (e.g. "https://git.example.com/git/").
+  //      Uses the standard gitweb URL shape
+  //      <base>?p=<remote-path>.git;a=commit;h=<full-sha>.
+  //   3. Nothing — returns null, the SHA renders as plain text.
   function gitwebBaseUrl() {
     const raw = (prefs.getItem('gitweb-base-url') || '').trim();
     if (!raw) return null;
     return raw.endsWith('/') ? raw : raw + '/';
   }
-  function gitwebCommitUrl(remotePath, fullSha) {
+  function _isGithubRemote(remoteUrl) {
+    if (!remoteUrl) return false;
+    return /(^|[/@.])github\.com[:/]/.test(remoteUrl);
+  }
+  function gitwebCommitUrl(remotePath, fullSha, remoteUrl) {
     if (!remotePath || !fullSha) return null;
+    if (_isGithubRemote(remoteUrl)) {
+      return `https://github.com/${remotePath}/commit/${fullSha}`;
+    }
     const base = gitwebBaseUrl();
     if (!base) return null;
     return `${base}?p=${remotePath}.git;a=commit;h=${fullSha}`;
+  }
+  function gitwebBranchUrlForHost(remotePath, branch, remoteUrl) {
+    if (!remotePath || !branch) return null;
+    if (_isGithubRemote(remoteUrl)) {
+      return `https://github.com/${remotePath}/tree/${branch}`;
+    }
+    const base = gitwebBaseUrl();
+    if (!base) return null;
+    return `${base}?p=${remotePath}.git;a=shortlog;h=refs/heads/${branch}`;
   }
 
   // Render an array of {sha,date,author,subject} commits as a structured
@@ -1410,7 +1428,7 @@
   // provided. Empty array → emptyText. The row whose sha equals
   // mergeBaseSha is marked so users can see "this is where the branch
   // was forked from".
-  function commitListOf(commits, emptyText, remotePath, mergeBaseSha) {
+  function commitListOf(commits, emptyText, remotePath, mergeBaseSha, remoteUrl) {
     const ol = h('ol', { class: 'commit-list' });
     if (!commits || !commits.length) {
       ol.append(h('li', { class: 'empty' }, emptyText || '(none)'));
@@ -1420,10 +1438,10 @@
       const fullSha = c.sha || '';
       const shortSha = fullSha.slice(0, 10);
       const isBase = mergeBaseSha && fullSha === mergeBaseSha;
-      const url = gitwebCommitUrl(remotePath, fullSha);
+      const url = gitwebCommitUrl(remotePath, fullSha, remoteUrl);
       const shaCell = url
         ? h('a', { class: 'sha', href: url, target: '_blank',
-                   rel: 'noopener noreferrer', title: 'Open commit in gitweb' }, shortSha)
+                   rel: 'noopener noreferrer', title: 'Open commit' }, shortSha)
         : h('code', { class: 'sha' }, shortSha);
       ol.append(h('li', {
         class: isBase ? 'is-merge-base' : null,
@@ -4817,10 +4835,13 @@
           ? dirtyFilesTableFor(repo.dirty_files, repo.path)
           : h('div', { class: 'tab-empty' }, 'Working tree is clean.') },
       { id: 'commits',   label: 'Last commits', count: repo.last_commits.length,
-        render: () => commitListOf(displayCommits, '(none)', repo.remote_path, repo.merge_base_sha) },
+        render: () => commitListOf(displayCommits, '(none)',
+                                    repo.remote_path, repo.merge_base_sha,
+                                    repo.remote_url) },
       { id: 'unpushed',  label: 'Unpushed',     count: repo.n_unpushed,
         render: () => repo.n_unpushed > 0
-          ? commitListOf(repo.unpushed, unpushedEmpty, repo.remote_path)
+          ? commitListOf(repo.unpushed, unpushedEmpty,
+                          repo.remote_path, null, repo.remote_url)
           : h('div', { class: 'tab-empty' }, unpushedEmpty) },
       { id: 'authors',   label: 'Authors',      count: repo.coauthors?.length || 0,
         render: () => (repo.coauthors?.length || 0) > 0
@@ -8047,7 +8068,7 @@
     // alphabetically-first repo). Stays visible in compact mode.
     const branchGitwebUrl = repo.ghost
       ? null
-      : gitwebBranchUrl(repo.remote_path, repo.branch);
+      : gitwebBranchUrl(repo.remote_path, repo.branch, repo.remote_url);
     const branchGitwebLink = branchGitwebUrl ? h('a', {
       class: 'branch-gitweb hover-popover-host',
       href: branchGitwebUrl,
@@ -8159,18 +8180,11 @@
     return card;
   }
 
-  // Build a gitweb shortlog URL for a given repo+branch. Branch can contain
-  // '/' (e.g. man/remove_maven_formatter) — encodeURIComponent escapes that
-  // but gitweb doesn't actually want it escaped, so use raw.
-  // remotePath comes from the server (see gather_repo_status →
-  // _gitweb_path_from_remote in agent_workspace.py); falling back to
-  // the local dir name is wrong because the on-disk worktree name can
-  // diverge from the remote project name.
-  function gitwebBranchUrl(remotePath, branch) {
-    if (!remotePath || !branch) return null;
-    const base = gitwebBaseUrl();
-    if (!base) return null;
-    return `${base}?p=${remotePath}.git;a=shortlog;h=refs/heads/${branch}`;
+  // Build a branch URL for a given repo. Delegates to the
+  // host-aware helper above so GitHub remotes get
+  // https://github.com/<owner>/<repo>/tree/<branch> automatically.
+  function gitwebBranchUrl(remotePath, branch, remoteUrl) {
+    return gitwebBranchUrlForHost(remotePath, branch, remoteUrl);
   }
 
   function tabSectionFor(issueObj, behindLimit) {
