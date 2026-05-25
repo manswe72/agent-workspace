@@ -379,7 +379,7 @@ def _write_mcp_config_for_agent(agent_id: str, port: int) -> Path:
 
     Each agent gets its own file because the URL bakes in the
     agent's identity (?agent=<id>) — claude has no other way to
-    tell the dashboard "I'm BSS-3733" since the MCP transport
+    tell the dashboard "I'm 42-fix-auth" since the MCP transport
     doesn't expose env vars or headers to the server. Files live
     under <DEFAULT_CACHE>/mcp/ and are overwritten on every spawn.
     """
@@ -1571,7 +1571,7 @@ def _claude_project_to_issue_repo(name: str, worktrees_root: Path) -> tuple[str,
     prefix = root_encoded + "-"
     if not name.startswith(prefix):
         return None
-    rest = name[len(prefix):]   # e.g. "BSS-10029-core" or "BSS-10173-claude-plugins"
+    rest = name[len(prefix):]   # e.g. "42-fix-auth-core" or "43-add-feature-claude-plugins"
     parts = rest.split("-")
     for split in range(len(parts) - 1, 0, -1):
         issue = "-".join(parts[:split])

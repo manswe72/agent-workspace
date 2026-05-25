@@ -2,13 +2,23 @@
 
 No CLI resume flag; sessions are resumed via the `/chat resume <tag>`
 slash command interactively.
+
+MCP: Gemini reads servers from `~/.gemini/settings.json` under
+`mcpServers`. Identity flows through `X-Agent-Id` over an HTTP header
+that resolves from the launcher's `$AGENT_WORKSPACE_AGENT_ID` env
+var via Gemini's `${VAR}` interpolation.
 """
 from __future__ import annotations
 
 import shlex
 from pathlib import Path
 
-from .base import AgentProvider, liveness_bash_block, marker_file
+from .base import (
+    AgentProvider,
+    ensure_gemini_mcp_config,
+    liveness_bash_block,
+    marker_file,
+)
 
 
 class GeminiProvider(AgentProvider):
@@ -27,12 +37,16 @@ class GeminiProvider(AgentProvider):
         marker = marker_file(Path.cwd(), self.id)
         liveness = liveness_bash_block(marker)
         model_arg = f" --model {shlex.quote(model)}" if model else ""
+        # Auto-register the dashboard's MCP server in
+        # ~/.gemini/settings.json. Identity per launch is carried by
+        # AGENT_WORKSPACE_AGENT_ID, which the launcher exports.
+        ensure_gemini_mcp_config()
         return f"{liveness}gemini{model_arg}"
 
     def supports_mcp(self) -> bool:
-        # Gemini CLI reads MCP servers from ~/.gemini/settings.json
-        # under "mcpServers". Same story as Codex — capability exists
-        # in the CLI; dashboard doesn't auto-inject yet.
+        return True
+
+    def auto_registers_mcp(self) -> bool:
         return True
 
     def model_pricing(self) -> dict[str, dict[str, float]]:

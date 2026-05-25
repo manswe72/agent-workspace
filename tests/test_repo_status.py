@@ -55,8 +55,8 @@ def test_known_issues_includes_seen_worktree(tmp_db, tmp_path: Path):
     tmp_db.execute(
         "INSERT INTO worktrees(issue, repo, path, first_seen, last_seen) "
         "VALUES (?, ?, ?, ?, ?)",
-        ("BSS-42", "core", str(tmp_path / "BSS-42" / "core"),
+        ("ws-42", "core", str(tmp_path / "ws-42" / "core"),
          "2026-01-01", "2026-01-02"),
     )
     tmp_db.commit()
-    assert "BSS-42" in cw.known_issues(tmp_db)
+    assert "ws-42" in cw.known_issues(tmp_db)

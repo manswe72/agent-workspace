@@ -8,7 +8,7 @@ import agent_workspace as cw
 
 def test_insert_agent_event_returns_id(tmp_db):
     eid = cw.insert_agent_event(
-        tmp_db, kind="Notification", issue="BSS-1",
+        tmp_db, kind="Notification", issue="ws-1",
         session_id="s1", message="hi", cwd=tempfile.gettempdir())
     assert isinstance(eid, int) and eid > 0
 

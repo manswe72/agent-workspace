@@ -12,7 +12,7 @@ Single-file Python stdlib server (no deps), SQLite cache, vanilla JS
 frontend. The server is read-only against your worktrees — it never
 runs git mutations on your behalf. When you use the Claude Code
 provider it can additionally ingest events posted via hooks (see
-*Claude Code provider* below).
+the [Claude Code provider doc](docs/providers/claude-code.md)).
 
 ## Agent CLI providers
 
@@ -20,24 +20,35 @@ Six providers ship out of the box. Pick one in **Profile → Agent
 CLI**. The dashboard auto-detects which are on PATH; rows for
 missing binaries are greyed out until you install the tool.
 
-| Provider | Binary | Install | Resume in cwd | MCP | Hooks |
+Each provider has its own doc with install, auth, MCP wiring, and
+the details of what's surfaced in the dashboard. Click through:
+
+[**Claude Code**](docs/providers/claude-code.md) ·
+[**OpenAI Codex CLI**](docs/providers/codex.md) ·
+[**Cursor Agent**](docs/providers/cursor.md) ·
+[**Gemini CLI**](docs/providers/gemini.md) ·
+[**Aider**](docs/providers/aider.md) ·
+[**Crush**](docs/providers/crush.md)
+
+Capability summary:
+
+| Provider | Binary | Install | Resume in cwd | MCP auto | Hooks |
 |---|---|---|---|---|---|
-| Claude Code (Anthropic) | `claude` | `npm install -g @anthropic-ai/claude-code` | `claude --continue` | ✓ auto | ✓ |
-| OpenAI Codex CLI (open source) | `codex` | `npm install -g @openai/codex` | `codex resume --last` | ✓ auto | — |
-| Aider (open source) | `aider` | `pipx install aider-chat` | auto (`.aider.chat.history.md`) | — | — |
-| Gemini CLI (open source) | `gemini` | `npm install -g @google/gemini-cli` | `/chat resume <tag>` (interactive) | manual | — |
-| Cursor Agent | `cursor-agent` | `curl https://cursor.com/install -fsS \| bash` | `cursor-agent resume` | ✓ auto | — |
-| Crush (Charm, open source) | `crush` | `go install github.com/charmbracelet/crush/cmd/crush@latest` | per-cwd, interactive | — | — |
+| [Claude Code (Anthropic)](docs/providers/claude-code.md) | `claude` | `npm install -g @anthropic-ai/claude-code` | `claude --continue` | ✓ | ✓ |
+| [OpenAI Codex CLI](docs/providers/codex.md) (open source) | `codex` | `npm install -g @openai/codex` | `codex resume --last` | ✓ | — |
+| [Cursor Agent](docs/providers/cursor.md) | `cursor-agent` | `curl https://cursor.com/install -fsS \| bash` | `cursor-agent resume` | ✓ | — |
+| [Gemini CLI](docs/providers/gemini.md) (open source) | `gemini` | `npm install -g @google/gemini-cli` | `/chat resume <tag>` (interactive) | ✓ | — |
+| [Aider](docs/providers/aider.md) (open source) | `aider` | `pipx install aider-chat` | auto (`.aider.chat.history.md`) | — | — |
+| [Crush](docs/providers/crush.md) (Charm, open source) | `crush` | `go install github.com/charmbracelet/crush/cmd/crush@latest` | per-cwd, interactive | — | — |
 
 The launcher gives every provider the same workspace context (cwd,
-branch, system prompt) and tracks session liveness via either the
-provider's own session log (Claude Code) or a marker file the launcher
-touches every 30 s (everything else). The event-hook →
-`/api/events` route only fires on the Claude Code provider (it
-depends on `~/.claude/settings.json` hooks, which the others don't
-have an equivalent for). MCP is broader: see *Claude Code provider*
-below for the agent-to-agent messaging tools, and *OpenAI Codex CLI*
-below for the auto-wiring of those same tools into Codex sessions.
+branch, system prompt). Session liveness for non-Claude providers
+is tracked via a marker file the launcher touches every 30 s.
+Lifecycle hooks (Stop / Notification / etc. → `/api/events`) only
+fire on Claude Code — the other CLIs don't have an equivalent
+mechanism. MCP is broader: Claude / Codex / Cursor / Gemini all
+auto-register the dashboard's in-process mailbox server; Aider and
+Crush have no MCP client.
 
 ## GitHub integration
 
@@ -69,8 +80,10 @@ calls get 5000 req/h.
     multi-repo issues can clone just the relevant subset.
     **🗑 Remove** walks `/api/issue/remove` and surfaces partial
     failures.
-  - **Open PRs you authored** — Repo / # / Title / State / Workspace
-    columns. Same workspace-existence indicator as the issues table.
+  - **Open issues (no assignee)** — same column shape; **+ Add**
+    prompts to claim (assign yourself) before creating the worktree.
+  - **Open PRs** — Repo / # / Title / State / Workspace columns.
+    Lists every open PR in the configured repos.
 - **Missing-primary banner** — auto-derived from the `github-repos`
   preference. Clone buttons use `https://github.com/<owner>/<repo>.git`
   with your PAT via `GIT_ASKPASS`; the token never lands in
@@ -325,209 +338,47 @@ The dashboard doubles as a worklog system:
 All tables (by-issue, work logs, week list) are click-to-sort with
 direction toggle and per-table state in `localStorage`.
 
-## Claude Code provider
+## Per-provider docs
 
-Two integrations only exist for the Claude Code provider because they
-depend on Claude-specific data formats. Other providers run as plain
-launchers.
+Each provider's deep section moved to its own file under
+`docs/providers/`. The list below summarises what's where:
 
-### Session activity (`~/.claude/projects/`)
+| File | Covers |
+|---|---|
+| [`docs/providers/claude-code.md`](docs/providers/claude-code.md) | Anthropic CLI. Session-log token / cost tracking, lifecycle hooks (Stop / Notification / SessionStart / etc.), MCP mailbox auto-wiring, hand-curated model picker. |
+| [`docs/providers/codex.md`](docs/providers/codex.md) | OpenAI Codex CLI. Install + `OPENAI_API_KEY`, MCP auto-wiring (`~/.codex/config.toml`), `codex mcp get` verification. |
+| [`docs/providers/cursor.md`](docs/providers/cursor.md) | Cursor Agent. Install via cursor.com script, MCP auto-wiring (`~/.cursor/mcp.json`). |
+| [`docs/providers/gemini.md`](docs/providers/gemini.md) | Gemini CLI. Install + auth, MCP auto-wiring (`~/.gemini/settings.json`). |
+| [`docs/providers/aider.md`](docs/providers/aider.md) | Aider. No MCP / no hooks; pass-through launcher only. |
+| [`docs/providers/crush.md`](docs/providers/crush.md) | Crush by Charmbracelet. No MCP / no hooks; pass-through launcher only. |
 
-Claude Code writes each session's prompts, tool calls, and token
-usage as JSONL files under `~/.claude/projects/<encoded-cwd>/*.jsonl`.
-The dashboard tails those files to produce:
+### MCP — agent-to-agent messaging
 
-- Per-workspace token / cost rollup in the 🤖 Agent panel
-- `last_claude_prompt` excerpts in the activity feed
-- Live `active` / `idle` / `closed` state pills (≤5 min mtime = active,
-  ≤24 h = idle, else closed)
-
-When the active provider is anything other than Claude Code, the
-dashboard falls back to a much simpler "is the launcher's marker
-file fresh?" check (≤5 min = active, ≤24 h = idle). Tokens and cost
-are not displayed for non-Claude providers — their CLIs don't write
-a comparably structured log on disk.
-
-### Hooks (`~/.claude/settings.json`)
-
-Claude Code lets the user wire arbitrary scripts into lifecycle
-events. Run `./setup.sh --enable-claude-hooks` (idempotent) to merge
-entries into `~/.claude/settings.json` for `Stop`, `Notification`,
-`UserPromptSubmit`, `SessionStart`, and `SessionEnd`. The hook script
-`bin/agent-event-notify`:
-- POSTs `{kind, issue, session_id, message, cwd}` to `/api/events`
-- fires `notify-send` for `Notification` + `Stop` events on Linux
-
-The dashboard surfaces unread events as a `🔔N` pill on the workspace
-tab and in the 🤖 Agent block's *Messages* pane. Marking events read
-clears the badge. Disable any time with
-`./setup.sh --disable-claude-hooks`. No equivalent hook system exists
-for Codex, Aider, Gemini, Cursor, or Crush, so these events fire only
-under the Claude Code provider.
-
-### Agent-to-agent messaging (MCP)
-
-**MCP itself is an open protocol** — Claude Code, OpenAI Codex CLI,
-Gemini CLI, and Cursor Agent all support it as clients (Aider and
-Crush don't). What's Claude-specific here is just the **auto-wiring**:
-the dashboard injects a per-agent `--mcp-config <path>` flag into
-the Claude launch line so the mailbox tools appear in `/mcp` without
-the user touching any config file.
-
-If you'd like the mailbox from another MCP-capable provider, add an
-entry pointing at `http://127.0.0.1:<port>/mcp?agent=<your-id>` to
-that CLI's MCP config file (`~/.codex/config.toml`,
-`~/.gemini/settings.json`, `~/.cursor/mcp.json`, …). Use any string
-as `<your-id>` — the dashboard treats it as the agent identity for
-the `read_messages` / `send_message` tool calls below.
-
-The dashboard's in-process MCP server (slug `agent-workspace`)
-exposes these tools to whichever agent connects:
+All four MCP-capable providers expose the same five tools — they
+hit the dashboard's in-process MCP server at
+`http://127.0.0.1:<port>/mcp`. Agent identity flows through either
+the `?agent=<id>` query (Claude Code) or the `X-Agent-Id` header
+(Codex / Cursor / Gemini), so cross-provider messaging just works:
 
 | Tool | What it does |
 |---|---|
-| `send_message(to, text, in_reply_to?)` | Send a message to another agent. Set `in_reply_to=<id>` to thread your reply under a message you got from `read_messages`. Recipient `to` is the issue key (e.g. `BSS-3733`) or `__agent__` for the General Agent. The dispatcher validates `to` against the dashboard's known-agent set (every issue under `--worktrees` plus `__agent__`) and returns an MCP error block on typos. |
-| `read_messages(unread_only=true, limit=50)` | Fetch this agent's inbox. Marks each returned row read so subsequent calls don't redeliver them. |
-| `request_review(target, ref, context?)` | Convenience wrapper that drops a structured `review_request` (with a git sha / branch / path in `ref`) into the target's mailbox. Replies travel back via `send_message`. |
-| `broadcast_message(text)` | Send the same text to every issue agent that currently has a live pty session on the dashboard. The General Agent and the calling agent are excluded so a broadcast never echoes back. Surfaced in the dashboard's compose picker as a "📢 Broadcast (all live issue agents)" pseudo-recipient. |
+| `send_message(to, text, in_reply_to?)` | Send to another agent. Recipient is a workspace id, a display name (set in the GitHub modal's ✏ rename), or `__agent__` / `Agent 007`. |
+| `read_messages(unread_only?, limit?)` | Fetch this agent's inbox; marks rows read. |
+| `request_review(target, ref, context?)` | Structured `review_request` with a git sha / branch / path. |
+| `list_agents(live_only?)` | Returns every agent id + display name + state. |
+| `broadcast_message(text)` | Fan one message out to every live workspace agent (General Agent + caller excluded). |
 
-How an agent picks up new mail:
+State lives in the dashboard's SQLite `agent_messages` table and
+never leaves this machine.
 
-1. **UserPromptSubmit hook** (`bin/agent-mailbox-inject`) — fires on every
-   human prompt and prepends `📬 You have N unread message(s)…` to the
-   next turn's context, so the agent reacts on its own without you having
-   to ask. Register once with `./setup.sh --enable-claude-hooks` (same
-   block that wires `agent-event-notify`).
-2. **Optional auto-poll** — when **Profile → Dashboard → Agents → Mailbox
-   auto-poll** is on (default OFF), the dashboard scans live pty
-   sessions every 20 s. If an attached agent has unread mail AND the
-   user has been idle in its terminal for ≥15 s, the dashboard types a
-   bracketed-paste nudge prompt + Enter so claude's TUI auto-submits.
-   Per-agent throttle (≥60 s between nudges) so a slow read isn't
-   repeatedly poked. **Every `send_message` / `broadcast_message` /
-   `request_review` over MCP also wakes the poll loop immediately**, so
-   the recipient typically gets the nudge within a second.
-3. **Tab badge** — a `📬N` chip on the General Agent tab and on each
-   issue tab counts unread mail addressed to that agent.
+### Per-workspace overrides
 
-How you see threads:
-
-- The General Agent's panel has a vertical icon strip on the left
-  (🤖 Agent / 📬 Messages / 💾 Stashes). Issue tabs get the same
-  strip (🤖 Agent / 🌿 Branches / 💾 Stashes) when the inline-console
-  pref is on.
-- The Messages pane has three views — **Thread** (the default —
-  threaded by `in_reply_to`, newest conversation first, replies
-  indented under their parent), **Received**, and **Sent**.
-- Each conversation root gets a **+N / −N** chip that folds the
-  subtree inline; a pane-head **⊞** button toggles every
-  conversation at once.
-- Each row carries ✕ (delete) and ↩ (reply). When the row is part
-  of a thread, ✕ opens a three-button confirm — **Cancel** /
-  **Delete** / **Delete Conversation (N)** — so accidental Enter
-  can't take a whole thread down.
-- Clicking ↩ docks the compose form **as a child of the message
-  row** with an accent left rail, so the reply UI is physically
-  anchored to its target. Sending or clearing returns it to the
-  top of the pane.
-- Pane head has a search box (substring match against body /
-  branch / ref / sender / recipient — all three views) and a
-  "📢 Broadcast (all live issue agents)" pseudo-entry in the
-  recipient picker.
-- The pane self-refreshes every 4 s while it's on screen so
-  agent-originated mail appears without clicking ↻.
-
-Toggle the whole feature off from **Profile → Dashboard → Agents →
-Agent-to-agent messaging**. When off, new agents launch with no
-`--mcp-config`, no `--allowedTools` rule, and the `📬` badge is hidden.
-
-State lives in the SQLite `agent_messages` table; messages are local
-to one dashboard instance and are not synced across machines.
-
-## OpenAI Codex CLI provider
-
-`codex` is the open-source CLI for OpenAI's coding models. The
-dashboard launches it the same way it launches Claude Code (the
-🤖 Agent button + the **Profile → Agent CLI → OpenAI Codex CLI**
-radio); on top of that it auto-wires the agent-to-agent MCP mailbox
-so Codex sessions can talk to Claude / Cursor / each other.
-
-### Install + auth
-
-```bash
-npm install -g @openai/codex
-export OPENAI_API_KEY=sk-...          # in your shell rc
-codex --version                        # confirm
-```
-
-After install, refresh the dashboard and switch **Profile → Agent CLI**
-to **OpenAI Codex CLI**. The row's "installed" pill turns green; the
-🤖 Agent button now launches `codex` in the workspace cwd.
-
-### Resume / session storage
-
-`codex resume --last` resumes the most recent session in the
-current workspace folder. Codex stores its own session metadata
-under `~/.codex/sessions/` — the dashboard doesn't parse that file
-format (yet), so the per-workspace Agent panel shows the simpler
-"active / idle / closed" state derived from the launcher's
-30-second marker file. Token totals and per-prompt cost from a
-running Codex session aren't surfaced; you can still see them with
-`codex` built-in commands inside the terminal.
-
-### MCP mailbox auto-wiring
-
-On every launch the dashboard merges this block into
-`~/.codex/config.toml`:
-
-```toml
-[mcp_servers.agent-workspace]
-url = "http://127.0.0.1:8766/mcp"
-env_http_headers = { "X-Agent-Id" = "AGENT_WORKSPACE_AGENT_ID" }
-approval_policy = "never"
-```
-
-`env_http_headers` is Codex's mechanism for "read this env var at
-launch and use it as the header value" — the dashboard's pty wrapper
-exports `AGENT_WORKSPACE_AGENT_ID=<workspace-id>` per shell, so the
-MCP server sees the right identity without a per-launch config
-rewrite. `approval_policy = "never"` pre-approves the four mailbox
-tools (`send_message`, `read_messages`, `request_review`,
-`list_agents`) so Codex doesn't pause for a permission prompt every
-time it pokes the mailbox.
-
-Verify the wiring with:
-
-```bash
-codex mcp get agent-workspace
-# Should print: transport: streamable_http
-#               url: http://127.0.0.1:<port>/mcp
-#               env_http_headers: X-Agent-Id=AGENT_WORKSPACE_AGENT_ID
-```
-
-The dashboard's `/mcp` endpoint accepts agent identity from EITHER
-`?agent=<id>` (Claude Code's per-launch config) OR `X-Agent-Id`
-header (everyone else), so the same four mailbox tools work across
-providers — a Codex session can `send_message(to="Alice")` and an
-attached Claude session sees the message in its inbox.
-
-### Manual MCP wiring (Cursor / Gemini)
-
-Cursor Agent's wiring is automatic too — the dashboard writes
-`~/.cursor/mcp.json` with the same shape (URL + `${AGENT_WORKSPACE_AGENT_ID}`
-header placeholder). Gemini CLI is not auto-wired yet; if you want
-the mailbox there, paste this into `~/.gemini/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "agent-workspace": {
-      "httpUrl": "http://127.0.0.1:8766/mcp",
-      "headers": { "X-Agent-Id": "${AGENT_WORKSPACE_AGENT_ID}" }
-    }
-  }
-}
-```
+The 🐙 GitHub modal has an **Agent** column and a **Model** column
+per issue row. Setting them stores
+`workspace-provider-<id>` / `workspace-model-<id>` preferences;
+those override the per-provider defaults (set in
+**Profile → Agent CLI** and **Profile → Model**) when the workspace
+launches.
 
 ## Agent console UX (quick messages + drag-drop)
 

@@ -152,6 +152,41 @@ def ensure_codex_mcp_config() -> Path:
     return cfg_path
 
 
+def ensure_gemini_mcp_config() -> Path:
+    """Idempotently merge the dashboard's MCP server into
+    `~/.gemini/settings.json` under `mcpServers.<name>`.
+
+    Gemini CLI uses the `httpUrl` key for streamable-HTTP MCP servers
+    (Cursor uses `url`; Claude Code uses the same shape via
+    `--mcp-config`). Headers support `${VAR}` env-var interpolation
+    so the launcher's per-shell AGENT_WORKSPACE_AGENT_ID flows
+    through cleanly."""
+    cfg_path = Path.home() / ".gemini" / "settings.json"
+    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    name = mcp_server_name()
+    entry = {
+        "httpUrl": dashboard_mcp_url(),
+        "headers": {"X-Agent-Id": "${AGENT_WORKSPACE_AGENT_ID}"},
+    }
+    cfg: dict = {}
+    if cfg_path.is_file():
+        try:
+            cfg = json.loads(cfg_path.read_text() or "{}")
+            if not isinstance(cfg, dict):
+                cfg = {}
+        except (OSError, ValueError):
+            cfg = {}
+    servers = cfg.setdefault("mcpServers", {})
+    if not isinstance(servers, dict):
+        servers = {}
+        cfg["mcpServers"] = servers
+    if servers.get(name) != entry:
+        servers[name] = entry
+        cfg_path.write_text(json.dumps(cfg, indent=2) + "\n")
+        cfg_path.chmod(0o600)
+    return cfg_path
+
+
 def liveness_bash_block(marker_path: Path) -> str:
     """Build a small bash snippet that:
       - mkdir -p the marker dir

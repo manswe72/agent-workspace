@@ -349,7 +349,7 @@
       'addIssue.label.issue':   'Issue',
       'addIssue.label.base':    'Branch from',
       'addIssue.label.repos':   'Repos',
-      'addIssue.help.issue':    'BSS-key or any branch-safe name. If origin/<issue> already exists, the new worktree tracks it.',
+      'addIssue.help.issue':    'Any branch-safe name (`<num>-<slug>` recommended for GitHub-issue linking). If origin/<issue> already exists, the new worktree tracks it.',
       'addIssue.help.base':     'Used only when origin/<issue> does NOT exist. Resolves to a local ref first, then origin/<base>.',
       'addIssue.button.create': 'Create',
       'addIssue.button.cancel': 'Cancel',
@@ -897,7 +897,7 @@
       'addIssue.label.issue':   'Issue',
       'addIssue.label.base':    'Branch från',
       'addIssue.label.repos':   'Repon',
-      'addIssue.help.issue':    'BSS-nyckel eller annat branch-säkert namn. Om origin/<issue> redan finns spårar den nya worktreen den.',
+      'addIssue.help.issue':    'Branch-säkert namn (`<num>-<slug>` rekommenderas för GitHub-issue-länkning). Om origin/<issue> redan finns spårar den nya worktreen den.',
       'addIssue.help.base':     'Används endast när origin/<issue> INTE finns. Slår upp lokal ref först, sedan origin/<base>.',
       'addIssue.button.create': 'Skapa',
       'addIssue.button.cancel': 'Avbryt',
@@ -4440,7 +4440,7 @@
     const knownIssues = (window.__lastState?.issues || []).map(i => i.issue);
     const issueInput = h('input', {
       type: 'text', list: 'manual-issue-list',
-      placeholder: 'issue (e.g. BSS-10029)',
+      placeholder: 'issue (e.g. 42-fix-auth)',
       value: suggestedIssue || activeIssueKey() || '',
     });
     const datalist = h('datalist', { id: 'manual-issue-list' },
@@ -9114,6 +9114,26 @@
     ));
     headChildren.push(expandBtn);
 
+    // ⤢ Fullscreen — toggle a "agent-fullscreen" class on the panel
+    // so the inline terminal expands to fill the viewport. Lives in
+    // the issue-head so it stays reachable when the agent panel is
+    // scrolled out of view. CSS picks the active-tint when
+    // `body.agent-fullscreen-active` is set.
+    headChildren.push(h('button', {
+      class: 'btn fullscreen-tab-btn hover-popover-host',
+      type: 'button',
+      'aria-label': t('agent.controls.fullscreen-tip'),
+      'data-issue': issueObj.issue,
+      onclick: (e) => {
+        e.preventDefault();
+        toggleAgentFullscreen(issueObj.issue);
+      },
+    }, '⤢',
+      h('div', { class: 'hover-popover' },
+        h('div', { class: 'hover-popover-foot' },
+          t('agent.controls.fullscreen-tip'))),
+    ));
+
     // 📌 Pin / unpin — keep this issue's tab leftmost regardless of the
     // active tabSort. State is persisted in localStorage; toggling
     // re-renders the whole dashboard so the tab strip reorders. Sits
@@ -9564,20 +9584,9 @@
       onclick: () => toggleAgentSearch(issue),
     }, t('agent.controls.search'));
 
-    // ⤢ Fullscreen — toggle a "agent-fullscreen" class on the panel
-    // so the terminal expands to fill the viewport. Click again to
-    // restore (Escape also exits). The button's label flips to "Exit
-    // fullscreen" while on. Fullscreen is a global mode (see
-    // fullscreenMode); the initial render just mirrors that flag.
-    const isFullscreen = fullscreenMode;
-    const fullscreenBtn = h('button', {
-      class: 'btn agent-fullscreen-btn',
-      type: 'button',
-      title: t('agent.controls.fullscreen-tip'),
-      onclick: () => toggleAgentFullscreen(issue),
-    }, isFullscreen
-        ? t('agent.controls.fullscreen-exit')
-        : t('agent.controls.fullscreen'));
+    // Fullscreen button now lives in the issue-head row alongside
+    // Pin / Remove (see headChildren above). The previous agent-
+    // controls-row copy was removed for the v2 layout.
 
     // ← → previous/next agent panel. The pinned General Agent tab
     // is part of the navigation ring too, so the user can flip
@@ -9615,7 +9624,6 @@
       openInEditorBtn,
       infoBtn,
       searchBtn,
-      fullscreenBtn,
       // Prev/next sit at the far right, matching the tab-strip's
       // own ◀ / ▶ scroll affordances.
       prevBtn,
@@ -9623,11 +9631,9 @@
     );
     panel.append(controlsRow);
     panel._controlsRow = controlsRow;
-    // Direct ref so toggleAgentFullscreen / stepIssue can update the
-    // label even after refreshSubActions hoists the controlsRow out
-    // of the panel into .issue-subtab-actions (panel.querySelector
-    // returns null once it's no longer a descendant).
-    panel._fullscreenBtn = fullscreenBtn;
+    // The fullscreen affordance now lives in the issue-head row;
+    // applyFullscreenClasses finds it by selector instead of via a
+    // panel-local ref.
 
     // --- Terminal host (xterm.js attaches here when running) ---
     // CRITICAL: when an xterm is already running for this issue, we

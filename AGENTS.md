@@ -57,7 +57,7 @@ default browser to it. CLI flags:
 | `GET /` | The dashboard HTML. State data is inlined as JSON for the JS to consume. |
 | `GET /api/status[?show_ghosts=1]` | JSON snapshot of every worktree currently on disk (and, optionally, "ghost" worktrees that have been removed). Re-fetched by the browser every 5 minutes. |
 | `GET /api/heatmap` | Zero-filled commit-per-day series for the last 365 days, used to render the heatmap card. |
-| `POST /api/open-agent-tab` | Body `{issue: "BSS-XXXX"}`. Spawns `bin/agent-worktrees --issue=<key>` to open a single new gnome-terminal tab attached to the user's existing window with `claude --continue` running in the right worktree. Triggered by the per-issue "💻 Console" button. |
+| `POST /api/open-agent-tab` | Body `{issue: "<workspace>"}`. Spawns `bin/agent-worktrees --issue=<key>` to open a single new gnome-terminal tab attached to the user's existing window with `claude --continue` running in the right worktree. Triggered by the per-issue "💻 Console" button. |
 | `GET /favicon.ico` | Redirects to the inline SVG favicon. |
 | `GET /static/{dashboard.css,dashboard.js,favicon.svg}` | Static assets. |
 

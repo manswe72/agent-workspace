@@ -334,7 +334,7 @@ TOOLS = [
         "description": (
             "Send a message to another agent on this dashboard. "
             "The recipient is identified by its issue key (e.g. "
-            "'BSS-3733') or the sentinel '__agent__' for the "
+            "'42-fix-auth') or the sentinel '__agent__' for the "
             "General Agent. When replying to a message from "
             "read_messages, pass that message's `id` as "
             "`in_reply_to` so the dashboard threads your reply "

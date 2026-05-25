@@ -17,7 +17,7 @@ Usage:
 Examples:
   python3 iip.py mandelbrot
   python3 iip.py __agent__ mandelbrot
-  python3 iip.py BSS-10029 /tmp/chart.png
+  python3 iip.py 42-fix-auth /tmp/chart.png
 """
 import base64
 import io
