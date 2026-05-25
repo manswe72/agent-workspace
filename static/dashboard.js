@@ -10069,10 +10069,11 @@
       mkSubBtn('branches', '🌿', t('issue.subtab.branches')),
       mkSubBtn('stashes',  '💾', t('issue.subtab.stashes')),
     );
-    // The sub-tab row holds: [icon-tabs][flex-grow gap][action slot].
-    // Both the strip and the slot live on the SAME horizontal line.
+    // The sub-tab row holds: [icon-tabs][flex-grow gap][action slot]
+    // [fullscreen extras]. The extras are hidden outside fullscreen
+    // (CSS) so they don't clutter the normal layout.
     const subRow = h('div', { class: 'issue-subtab-row' },
-      subBar, subActions);
+      subBar, subActions, buildFullscreenExtras(issueObj.issue));
 
     const branchesPanel = buildBranchesPanel();
     branchesPanel.id = `issue-sub-branches-${cssId(issueObj.issue)}`;
@@ -10204,6 +10205,44 @@
     // Default ON — the banner is informative-only and the actual
     // pull + restart is still gated on the user's confirmation.
     return v === null || v === '' || v === '1';
+  }
+
+  // Mini-toolbar pinned to the sub-tab row that surfaces the most
+  // important "I'm in fullscreen" affordances regardless of which
+  // sub-tab is active: Exit fullscreen + ◀/▶ navigation. Hidden by
+  // CSS outside fullscreen mode (see `.fullscreen-extras` in
+  // dashboard.css). Duplicates of the buttons in the Agent pane's
+  // controlsRow — needed because when the user clicks Branches /
+  // Stashes / Delegations / Messages the controlsRow is swapped
+  // out and they'd otherwise lose the ability to escape fullscreen
+  // or step between issues without going back to Agent first.
+  function buildFullscreenExtras(issue) {
+    const exitBtn = h('button', {
+      class: 'btn btn-inline agent-fullscreen-btn',
+      type: 'button',
+      title: t('agent.controls.fullscreen-tip'),
+      'aria-label': t('agent.controls.fullscreen-tip'),
+      'data-issue': issue,
+      onclick: (e) => {
+        e.preventDefault();
+        toggleAgentFullscreen(issue);
+      },
+    }, t('agent.controls.fullscreen'));
+    const prev = h('button', {
+      class: 'btn agent-nav-btn agent-nav-prev',
+      type: 'button',
+      title: t('agent.nav.prev-tip'),
+      onclick: () => stepIssue(issue, -1),
+    }, '◀');
+    const next = h('button', {
+      class: 'btn agent-nav-btn agent-nav-next',
+      type: 'button',
+      title: t('agent.nav.next-tip'),
+      onclick: () => stepIssue(issue, +1),
+    }, '▶');
+    return h('div', { class: 'fullscreen-extras',
+                       'data-issue': issue },
+      exitBtn, prev, next);
   }
 
   function buildAgentPanel(issueObj) {
@@ -10341,14 +10380,15 @@
     // ⤢ Fullscreen — for the General Agent (no issue-head row) this
     // button is the only entry point and is always visible. For per-
     // issue panels the primary copy lives in the issue-head row next
-    // to Pin / Remove; we still emit a duplicate here so the user
-    // can EXIT fullscreen (the issue-head is covered by the position:
-    // fixed body-wrap in fullscreen mode). CSS keeps the per-issue
-    // copy hidden outside fullscreen — see `.agent-fullscreen-btn-
-    // controls` rule in dashboard.css.
-    const fullscreenInlineBtn = h('button', {
-      class: 'btn btn-inline agent-fullscreen-btn'
-              + (isGeneral ? '' : ' agent-fullscreen-btn-controls'),
+    // to Pin / Remove; the sub-tab row's .fullscreen-extras
+    // (buildFullscreenExtras) provides the in-fullscreen Exit
+    // affordance, so no controls-row duplicate is needed.
+    // For the General Agent — which has no issue-head — this is
+    // the only inline Exit-fullscreen control alongside the Agent
+    // pane's other actions; the sub-tab .fullscreen-extras covers
+    // every other sub-tab.
+    const fullscreenInlineBtn = isGeneral ? h('button', {
+      class: 'btn btn-inline agent-fullscreen-btn',
       type: 'button',
       title: t('agent.controls.fullscreen-tip'),
       'aria-label': t('agent.controls.fullscreen-tip'),
@@ -10357,7 +10397,7 @@
         e.preventDefault();
         toggleAgentFullscreen(issue);
       },
-    }, t('agent.controls.fullscreen'));
+    }, t('agent.controls.fullscreen')) : null;
 
     // ← → previous/next agent panel. The pinned General Agent tab
     // is part of the navigation ring too, so the user can flip
@@ -14341,7 +14381,7 @@
     // active sub-tab).
     refreshSubActions();
     const subRow = h('div', { class: 'issue-subtab-row' },
-      subBar, subActions);
+      subBar, subActions, buildFullscreenExtras('__agent__'));
 
     // Apply the persisted sub-tab's visibility. Was a bug before:
     // when subActive === 'messages' from a previous activate() and
