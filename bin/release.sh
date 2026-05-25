@@ -195,9 +195,18 @@ fi
 step "building release tarball"
 run ./bin/build-release-tarball.sh
 TARBALL="dist/agent-workspace-${VERSION}.tar.gz"
+STABLE_TARBALL="dist/agent-workspace.tar.gz"
 if (( ! DRY_RUN )) && [[ ! -f "$TARBALL" ]]; then
   err "tarball not found at $TARBALL"
   exit 1
+fi
+# Stable-named copy uploaded alongside the versioned one. Lets
+# install docs link to a permanent URL:
+#   /releases/latest/download/agent-workspace.tar.gz
+# that always points at the newest release without doc edits per
+# version bump.
+if (( ! DRY_RUN )); then
+  cp "$TARBALL" "$STABLE_TARBALL"
 fi
 
 # ── tag + push ───────────────────────────────────────────────────────────
@@ -213,6 +222,7 @@ fi
 step "creating GitHub release"
 gh_args=("release" "create" "$TAG"
   "$TARBALL"
+  "$STABLE_TARBALL"
   "--title" "$TAG"
   "--notes" "$NOTES")
 [[ "$DRAFT"      -eq 1 ]] && gh_args+=("--draft")
@@ -228,4 +238,6 @@ else
   printf '   url:      https://github.com/%s/releases/tag/%s\n' "$REPO_SLUG" "$TAG"
   printf '   tarball:  https://github.com/%s/releases/download/%s/agent-workspace-%s.tar.gz\n' \
     "$REPO_SLUG" "$TAG" "$VERSION"
+  printf '   stable:   https://github.com/%s/releases/latest/download/agent-workspace.tar.gz\n' \
+    "$REPO_SLUG"
 fi

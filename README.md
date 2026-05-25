@@ -145,25 +145,22 @@ Inside each tab:
 
 ## Quick start
 
-Download the release tarball, extract it, and run the installer:
-
 ```bash
-tar xzf agent-workspace-*.tar.gz
+curl -fsSLO https://github.com/manswe72/agent-workspace/releases/latest/download/agent-workspace.tar.gz
+tar xzf agent-workspace.tar.gz
 cd agent-workspace-*/
 ./install.sh
+agent-worktrees-server
 ```
 
-`install.sh` is a thin wrapper around `setup.sh` (which does the
-real per-machine work — see [Developer install](#developer-install)
-below if you'd rather work from a git clone). Both run identically:
-they check prerequisites (Python ≥ 3.10, git), symlink the binaries
-from `./bin` into `~/.local/bin`, install bash completions, and offer
-to wire Claude Code hooks (Claude Code provider only).
+Full details — prerequisites, per-platform notes, upgrade, uninstall,
+troubleshooting, developer install — live in **[INSTALL.md](INSTALL.md)**.
 
-A release install ships **just the source files needed to run the
-server** — no `.git/`, no tests, no packaging scaffolding. The in-app
-**Update server** button is greyed out in this mode; upgrade by
-downloading the next tarball and re-running `./install.sh`.
+`install.sh` is a thin wrapper around `setup.sh` (the real per-machine
+installer). A release install ships **just the source files needed to
+run the server** — no `.git/`, no tests, no packaging scaffolding. The
+in-app **Update server** button is greyed out in this mode; upgrade
+by re-running the curl above.
 
 On Linux the installer also drops an **Agent Workspace** app-launcher
 entry under `~/.local/share/applications/` (so the dashboard shows up
