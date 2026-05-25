@@ -555,6 +555,61 @@ def create_pr(repo: str, head: str, base: str, title: str,
     }, None
 
 
+def create_issue(repo: str, title: str, body: str = "",
+                  assign_self: bool = False
+                  ) -> tuple[dict | None, str | None]:
+    """Open a GitHub issue. Returns ({number, url, title}, None) on
+    success or (None, err) on failure. When `assign_self` is True,
+    also adds the authenticated user as the issue's assignee — saves
+    a round-trip when the user is creating a workspace for an issue
+    they intend to claim immediately."""
+    token = _resolve_token()
+    if not token:
+        return None, "no GITHUB_TOKEN — create_issue needs auth"
+    if not title.strip():
+        return None, "title is required"
+    payload: dict = {"title": title.strip()}
+    if body:
+        payload["body"] = body
+    if assign_self:
+        login = _whoami(token)
+        if login:
+            payload["assignees"] = [login]
+    url = f"{_API_BASE}/repos/{repo}/issues"
+    req_body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=req_body, method="POST")
+    req.add_header("Authorization", f"Bearer {token}")
+    for k, v in _COMMON_HEADERS.items():
+        req.add_header(k, v)
+    req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as ex:
+        try:
+            payload = json.loads(ex.read().decode("utf-8", "replace"))
+            msg = payload.get("message") or str(ex)
+            errs = payload.get("errors") or []
+            if errs and isinstance(errs[0], dict):
+                more = errs[0].get("message") or errs[0].get("code")
+                if more:
+                    msg = f"{msg}: {more}"
+        except Exception:  # noqa: BLE001
+            msg = str(ex)
+        return None, f"HTTP {ex.code}: {msg}"
+    except (urllib.error.URLError, OSError, TimeoutError) as ex:
+        return None, f"network: {ex}"
+    # Invalidate the assigned/unassigned caches for this repo so the
+    # new issue surfaces in the GitHub modal without --force.
+    _ISSUE_LIST_CACHE.pop(repo, None)
+    _UNASSIGNED_LIST_CACHE.pop(repo, None)
+    return {
+        "number": data.get("number"),
+        "url":    data.get("html_url"),
+        "title":  data.get("title") or title.strip(),
+    }, None
+
+
 def issue_for_workspace(workspace: str) -> dict | None:
     """The GitHub issue a workspace maps to. Tries every configured repo
     in order, returning the first hit. None when the workspace name

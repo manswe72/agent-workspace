@@ -5489,6 +5489,8 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                                        "repo": repo, "number": number})
             elif parsed.path == "/api/github/pr/create":
                 self._do_create_pr()
+            elif parsed.path == "/api/github/issue/create":
+                self._do_create_github_issue()
             elif parsed.path == "/api/open-agent-tab":
                 self._do_open_claude_tab()
             elif parsed.path.startswith("/api/issue/git-op/"):
@@ -7190,6 +7192,69 @@ def make_handler(worktrees_root: Path, behind_limit: int,
             })
             # Schedule the self-restart AFTER the response is on the wire.
             schedule_self_restart(delay_seconds=0.7)
+
+        def _do_create_github_issue(self):
+            """POST a new GitHub issue + return the workspace slug
+            the dashboard should use for the matching local worktree.
+
+            Body:
+              {
+                "repo":         "<owner>/<repo>",  # required
+                "title":        "<text>",          # required
+                "body":         "<markdown>",      # optional
+                "assign_self":  true               # optional (default
+                                                   #   true — user is
+                                                   #   creating it to
+                                                   #   work on it)
+              }
+
+            Response:
+              {
+                "number":     42,
+                "url":        "https://github.com/.../issues/42",
+                "title":      "<title-as-stored>",
+                "workspace":  "42-add-pdf-export"   # ready to feed
+                                                    # into the existing
+                                                    # /api/issue/create
+              }
+            """
+            from awlib import github as _github_mod
+            body = self._read_json_body() or {}
+            repo = (body.get("repo") or "").strip()
+            title = (body.get("title") or "").strip()
+            pr_body = body.get("body") or ""
+            assign_self = body.get("assign_self")
+            assign_self = True if assign_self is None else bool(assign_self)
+            if not repo:
+                self._send_json(400, {"error": "repo is required"})
+                return
+            if not re.match(r"^[^\s/]+/[^\s/]+$", repo):
+                self._send_json(400, {
+                    "error": "repo must be 'owner/repo'"})
+                return
+            if not title:
+                self._send_json(400, {"error": "title is required"})
+                return
+            data, err = _github_mod.create_issue(
+                repo, title, pr_body, assign_self=assign_self)
+            if err:
+                self._send_json(403 if "HTTP 403" in (err or "")
+                                 else 500, {"error": err})
+                return
+            num = (data or {}).get("number")
+            # Workspace slug: <num>-<kebab-of-title>. Mirrors the
+            # frontend's workspaceNameFor() in static/dashboard.js so
+            # a GitHub-modal-clicked workspace and a created-here
+            # workspace land at the same canonical name.
+            slug = re.sub(r"[^a-z0-9]+", "-", title.lower())
+            slug = slug.strip("-")[:40].rstrip("-")
+            workspace = f"{num}-{slug}" if slug else str(num)
+            self._send_json(200, {
+                "number":    num,
+                "url":       (data or {}).get("url"),
+                "title":     (data or {}).get("title"),
+                "workspace": workspace,
+            })
 
         def _do_create_pr(self):
             """Open a GitHub pull request for every repo under a given

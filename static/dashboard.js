@@ -402,6 +402,16 @@
       'addIssue.help.model':    'Optional model override for the chosen Agent CLI. Default = the CLI\'s built-in default.',
       'addIssue.provider.default':'(dashboard default)',
       'addIssue.model.default': '(provider default)',
+      'addIssue.gh.toggle':     'Also create a GitHub issue for this workspace',
+      'addIssue.gh.label.repo': 'GitHub repo',
+      'addIssue.gh.label.title':'Issue title',
+      'addIssue.gh.label.body': 'Issue body (markdown)',
+      'addIssue.gh.assign-self':'Assign the issue to me',
+      'addIssue.gh.help':       'The issue is created first; its number + a slug of the title become the workspace name (e.g. `42-fix-auth`). The local Issue field above is overwritten with that.',
+      'addIssue.gh.warn.no-repo':'Pick a GitHub repo',
+      'addIssue.gh.warn.no-title':'Issue title is required',
+      'addIssue.gh.toast.ok':   '✓ created issue #{number} in {repo}',
+      'addIssue.gh.toast.fail': 'GitHub issue create failed: {error}',
       'addIssue.help.issue':    'Any branch-safe name (`<num>-<slug>` recommended for GitHub-issue linking). If origin/<issue> already exists, the new worktree tracks it.',
       'addIssue.help.base':     'Used only when origin/<issue> does NOT exist. Resolves to a local ref first, then origin/<base>.',
       'addIssue.button.create': 'Create',
@@ -8541,6 +8551,84 @@
                        h('span', {}, repo)) };
     });
     const agentPickers = buildProviderModelPickers();
+
+    // ── Also create a GitHub issue (optional) ────────────────────
+    // When the user wants this workspace to be backed by a brand-
+    // new GitHub issue, tick the box and fill in the per-repo
+    // fields. On submit the dashboard POSTs the issue first, then
+    // uses the returned `<num>-<slug>` as the workspace name —
+    // overriding whatever's in the Issue field at the top.
+    const trackedRepos = ((githubModalPrefs || {})['github-repos'] || [])
+      .filter(Boolean);
+    const ghIssueToggle = h('input', {
+      type: 'checkbox', id: 'add-issue-make-github',
+      onchange: () => {
+        ghIssueBlock.style.display = ghIssueToggle.checked ? '' : 'none';
+        // When the user opts in, defocusing the workspace-name field
+        // signals that the auto-numbered name will replace it on
+        // submit. Disable the field to make that obvious.
+        issueInput.disabled = ghIssueToggle.checked && trackedRepos.length
+                                ? '' : null;
+        issueInput.placeholder = ghIssueToggle.checked
+          ? '(auto from the GitHub issue number + title)'
+          : '42-fix-auth';
+      },
+    });
+    const ghRepoSel = h('select', { class: 'add-issue-input' },
+      ...trackedRepos.map(r => h('option', { value: r }, r)));
+    const ghTitleInput = h('input', {
+      type: 'text', class: 'add-issue-input',
+      placeholder: 'Issue title (becomes the workspace slug)',
+      style: { width: '100%' },
+    });
+    const ghBodyInput = h('textarea', {
+      class: 'add-issue-input', rows: '4',
+      placeholder: '(optional) longer description, markdown OK',
+      style: { width: '100%', minHeight: '5.5rem',
+                fontFamily: 'inherit' },
+    });
+    const ghAssignSelfInput = h('input', {
+      type: 'checkbox', checked: '',
+    });
+    const ghIssueBlock = h('div', {
+      class: 'add-issue-gh-block',
+      style: { display: 'none',
+                marginTop: '0.4rem',
+                padding: '0.6rem',
+                border: '1px solid var(--border-2)',
+                borderRadius: '6px',
+                background: 'var(--panel-2)' },
+    },
+      !trackedRepos.length
+        ? h('div', { class: 'muted' },
+            'No tracked GitHub repos — add one under Profile → GitHub first.')
+        : h('div', {},
+            h('label', { class: 'add-issue-label' },
+              t('addIssue.gh.label.repo')),
+            ghRepoSel,
+            h('label', { class: 'add-issue-label' },
+              t('addIssue.gh.label.title')),
+            ghTitleInput,
+            h('label', { class: 'add-issue-label' },
+              t('addIssue.gh.label.body')),
+            ghBodyInput,
+            h('label', { class: 'add-issue-repo-row',
+                          style: { marginTop: '0.4rem' } },
+              ghAssignSelfInput,
+              h('span', {}, t('addIssue.gh.assign-self'))),
+            h('div', { class: 'add-issue-help' },
+              t('addIssue.gh.help'))),
+    );
+    // Keep title default-synced with the workspace-name field so
+    // the user only has to type once when they're using the
+    // "<num>-<slug>" convention.
+    issueInput.addEventListener('input', () => {
+      if (!ghTitleInput.value.trim()) {
+        // Don't auto-populate — they'd type GH title and we'd
+        // overwrite it. Only set when empty.
+      }
+    });
+
     const resultsHost = h('div', { class: 'add-issue-results' });
     const close = () =>
       document.getElementById('add-issue-dialog')?.remove();
@@ -8554,23 +8642,88 @@
     let buttonMode = 'create';
 
     const submit = async () => {
-      const issue = issueInput.value.trim();
+      let issue = issueInput.value.trim();
       const base = baseInput.value.trim() || 'master';
       const repos = repoBoxes.filter(b => b.cb.checked).map(b => b.repo);
-      if (!issue) {
+      const makeGhIssue = !!ghIssueToggle.checked;
+      // When opting in to GitHub-issue creation, the workspace name
+      // is derived server-side from the issue number + title — so
+      // we accept an empty Issue field upstream. Otherwise it's
+      // required as before.
+      if (!makeGhIssue && !issue) {
         showToast('warn', t('addIssue.warn.empty')); issueInput.focus(); return;
       }
-      if (!/^[A-Za-z0-9._-]+$/.test(issue)) {
+      if (issue && !/^[A-Za-z0-9._-]+$/.test(issue)) {
         showToast('warn', t('addIssue.warn.invalid')); issueInput.focus(); return;
       }
       if (!repos.length) {
         showToast('warn', t('addIssue.warn.no-repos')); return;
+      }
+      // GitHub-issue validation upfront so a typo doesn't get us
+      // halfway through a worktree create before failing.
+      const ghTitle = makeGhIssue ? ghTitleInput.value.trim() : '';
+      const ghRepo = makeGhIssue ? (ghRepoSel.value || '').trim() : '';
+      if (makeGhIssue) {
+        if (!trackedRepos.length) {
+          showToast('warn',
+            'Configure a GitHub repo first (Profile → GitHub).');
+          return;
+        }
+        if (!ghRepo) {
+          showToast('warn', t('addIssue.gh.warn.no-repo'));
+          return;
+        }
+        if (!ghTitle) {
+          showToast('warn', t('addIssue.gh.warn.no-title'));
+          ghTitleInput.focus(); return;
+        }
       }
       const agentChoice = agentPickers.read();
       submitBtn.disabled = true;
       submitBtn.textContent = t('addIssue.button.creating');
       resultsHost.replaceChildren(
         h('div', { class: 'muted' }, t('addIssue.button.creating')));
+
+      // Step 1 (optional): create the GitHub issue. On success the
+      // server returns a `<num>-<slug>` we use as the workspace
+      // name (replacing whatever the user typed). On failure we
+      // bail out — no half-created state.
+      if (makeGhIssue) {
+        try {
+          const r = await fetch('/api/github/issue/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              repo: ghRepo,
+              title: ghTitle,
+              body: ghBodyInput.value || '',
+              assign_self: !!ghAssignSelfInput.checked,
+            }),
+          });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok || !d.workspace) {
+            showToast('error',
+              t('addIssue.gh.toast.fail',
+                { error: d.error || `HTTP ${r.status}` }));
+            submitBtn.disabled = false;
+            submitBtn.textContent = t('addIssue.button.create');
+            resultsHost.replaceChildren();
+            return;
+          }
+          issue = d.workspace;
+          showToast('ok', t('addIssue.gh.toast.ok',
+            { repo: ghRepo, number: d.number }));
+        } catch (err) {
+          showToast('error',
+            t('addIssue.gh.toast.fail',
+              { error: err.message || err }));
+          submitBtn.disabled = false;
+          submitBtn.textContent = t('addIssue.button.create');
+          resultsHost.replaceChildren();
+          return;
+        }
+      }
+
       // Persist the per-workspace provider / model overrides *before*
       // calling /api/issue/create so the very first agent launch (the
       // server side adds a row only after the worktree exists) sees
@@ -8697,6 +8850,11 @@
           h('label', { class: 'add-issue-label' }, t('addIssue.label.repos')),
           h('div', { class: 'add-issue-repos' },
             ...repoBoxes.map(b => b.row)),
+          h('label', { class: 'add-issue-repo-row',
+                        style: { marginTop: '0.6rem' } },
+            ghIssueToggle,
+            h('span', {}, t('addIssue.gh.toggle'))),
+          ghIssueBlock,
           h('label', { class: 'add-issue-label' },
             t('addIssue.label.provider')),
           agentPickers.providerSel,
