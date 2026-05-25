@@ -7122,6 +7122,7 @@ def make_handler(worktrees_root: Path, behind_limit: int,
             title = (body.get("title") or "").strip() or issue
             pr_body = body.get("body") or ""
             draft = bool(body.get("draft"))
+            force_push = bool(body.get("force_push"))
             if not issue:
                 self._send_json(400, {"error": "issue is required"})
                 return
@@ -7150,20 +7151,75 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                         "message": "remote.origin.url is not a "
                                    "GitHub URL"})
                     continue
-                # Push the branch first. --set-upstream wires the
-                # local branch to origin/<branch> so subsequent
-                # `git push` from the agent's shell works bare.
+                # Fast-fail when the branch has no commits ahead of
+                # the base — GitHub returns 422 "No commits between
+                # X and Y" otherwise, after a needless push round-
+                # trip. We compare against origin/<base> when it
+                # exists (the freshly-fetched state), falling back
+                # to the local <base> ref. Refuse instead of
+                # POSTing so the user gets the actual problem.
+                # `git fetch origin <base>` was already done by the
+                # Add-issue flow, but re-run here to catch the case
+                # where the user is rebasing days after creating
+                # the workspace.
+                subprocess.run(
+                    ["git", "-C", str(wt), "fetch", "origin", base],
+                    capture_output=True, text=True, timeout=30,
+                )
+                base_ref = None
+                for cand in (f"origin/{base}", base):
+                    r = subprocess.run(
+                        ["git", "-C", str(wt), "rev-parse", "--verify",
+                         cand],
+                        capture_output=True, text=True, timeout=10,
+                    )
+                    if r.returncode == 0:
+                        base_ref = cand
+                        break
+                if base_ref:
+                    ahead = subprocess.run(
+                        ["git", "-C", str(wt), "rev-list", "--count",
+                         f"{base_ref}..HEAD"],
+                        capture_output=True, text=True, timeout=10,
+                    )
+                    if ahead.returncode == 0 and \
+                            ahead.stdout.strip() == "0":
+                        results.append({
+                            "repo": wt.name, "slug": slug, "ok": False,
+                            "action": "empty-diff",
+                            "message": ("no commits between "
+                                         f"{base_ref} and HEAD — "
+                                         "make at least one commit "
+                                         "on the branch before "
+                                         "opening a PR")})
+                        continue
+                # Push the branch. --set-upstream wires the local
+                # branch to origin/<branch> so subsequent `git push`
+                # from the agent's shell works bare. When the user
+                # opted in to Force push, use --force-with-lease
+                # which rejects the push if the remote moved since
+                # we last fetched (still safer than --force).
+                push_argv = ["git", "-C", str(wt), "push",
+                              "--set-upstream"]
+                if force_push:
+                    push_argv.append("--force-with-lease")
+                push_argv.extend(["origin", issue])
                 push = subprocess.run(
-                    ["git", "-C", str(wt), "push",
-                     "--set-upstream", "origin", issue],
+                    push_argv,
                     capture_output=True, text=True, timeout=60,
                 )
                 if push.returncode != 0:
+                    # Detect non-fast-forward so the dashboard can
+                    # surface the Force-push hint without grepping
+                    # the error text client-side.
+                    err_text = (push.stderr or push.stdout or "").strip()
+                    nff = ("non-fast-forward" in err_text or
+                            "rejected" in err_text)
                     results.append({
                         "repo": wt.name, "slug": slug, "ok": False,
                         "action": "push-failed",
-                        "message": (push.stderr or push.stdout or
-                                     "").strip()})
+                        "non_fast_forward": nff,
+                        "message": err_text})
                     continue
                 pr, err = _github_mod.create_pr(
                     slug, head=issue, base=base,

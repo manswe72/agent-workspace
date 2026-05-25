@@ -379,6 +379,8 @@
       'pr.create.label.base':   'Base branch',
       'pr.create.label.body':   'Description (markdown)',
       'pr.create.label.draft':  'Open as draft',
+      'pr.create.label.force':  'Force push (overwrite remote branch with --force-with-lease)',
+      'pr.create.toast.force-hint':'Remote branch diverges from local. Click Open PR again to force-push.',
       'pr.create.btn.submit':   'Open PR',
       'pr.create.btn.cancel':   'Cancel',
       'pr.create.btn.creating': 'Creating…',
@@ -960,6 +962,8 @@
       'pr.create.label.base':   'Basgren',
       'pr.create.label.body':   'Beskrivning (markdown)',
       'pr.create.label.draft':  'Öppna som utkast',
+      'pr.create.label.force':  'Tvinga push (skriv över fjärrbranchen med --force-with-lease)',
+      'pr.create.toast.force-hint':'Fjärrbranchen avviker från den lokala. Klicka Öppna PR igen för att tvinga push.',
       'pr.create.btn.submit':   'Öppna PR',
       'pr.create.btn.cancel':   'Avbryt',
       'pr.create.btn.creating': 'Skapar…',
@@ -8297,6 +8301,7 @@
                 fontFamily: 'inherit' },
     });
     const draftInput = h('input', { type: 'checkbox' });
+    const forceInput = h('input', { type: 'checkbox' });
     const resultsHost = h('div', { class: 'add-issue-results' });
 
     const close = () =>
@@ -8307,6 +8312,7 @@
       const base  = baseInput.value.trim() || 'main';
       const body  = bodyInput.value;
       const draft = !!draftInput.checked;
+      const force_push = !!forceInput.checked;
       if (!title) {
         showToast('warn', t('pr.create.warn.empty-title'));
         titleInput.focus();
@@ -8320,7 +8326,9 @@
         const r = await fetch('/api/github/pr/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ issue, base, title, body, draft }),
+          body: JSON.stringify({
+            issue, base, title, body, draft, force_push,
+          }),
         });
         const d = await r.json().catch(() => ({}));
         const results = Array.isArray(d.results) ? d.results : [];
@@ -8365,6 +8373,14 @@
         results.filter(rr => !rr.ok).forEach(rr => showToast('error',
           t('pr.create.toast.err',
             { repo: rr.repo, error: rr.message || rr.action })));
+        // If a row failed with non-fast-forward, pre-tick the
+        // Force push checkbox + nudge the user. They can review
+        // the error text and re-submit with one more click.
+        if (results.some(rr => !rr.ok && rr.non_fast_forward)
+            && !forceInput.checked) {
+          forceInput.checked = true;
+          showToast('warn', t('pr.create.toast.force-hint'));
+        }
         refreshAll(true);
         submitBtn.disabled = false;
         if (ok.length === results.length) {
@@ -8419,6 +8435,8 @@
           bodyInput,
           h('label', { class: 'add-issue-repo-row' },
             draftInput, h('span', {}, t('pr.create.label.draft'))),
+          h('label', { class: 'add-issue-repo-row' },
+            forceInput, h('span', {}, t('pr.create.label.force'))),
           resultsHost,
         ),
         h('div', { class: 'add-issue-foot' },
