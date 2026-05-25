@@ -4103,3 +4103,64 @@ nav.tabs .github-pill { font-size: 10px; }
   opacity: 0.5;
 }
 .workspace-name-edit:hover { opacity: 1; }
+
+/* ── Demo tour ─────────────────────────────────────────────────────── */
+/* Overlay shown from the empty-state Demo button. The backdrop dims
+   the page so the demo panel reads as foreground, but pointer-events
+   is `none` so the user can still see hover states on the real UI
+   behind. The panel itself sits at the bottom-right so most centred
+   modals stay legible. */
+#demo-overlay { position: fixed; inset: 0; z-index: 340; pointer-events: none; }
+.demo-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0, 0, 0, 0.30);
+  pointer-events: none;
+}
+.demo-panel {
+  position: absolute;
+  right: 1.5rem; bottom: 1.5rem;
+  width: 420px; max-width: calc(100vw - 3rem);
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 0.9rem 1rem 0.8rem;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  z-index: 350;
+  pointer-events: auto;          /* re-enable for the panel itself */
+}
+.demo-close-btn {
+  position: absolute; top: 0.4rem; right: 0.5rem;
+  background: transparent; border: none;
+  color: var(--fg-muted); font-size: 14px; line-height: 1;
+  cursor: pointer; padding: 4px 6px;
+  border-radius: 4px;
+}
+.demo-close-btn:hover {
+  background: var(--panel-2); color: var(--fg);
+}
+.demo-step-count {
+  font-size: 11px; color: var(--fg-muted);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  margin-bottom: 0.3rem;
+}
+.demo-panel-title {
+  margin: 0 0 0.4rem; font-size: 15px; font-weight: 600;
+  padding-right: 1.4rem;          /* space for the ✕ */
+}
+.demo-panel-body {
+  margin: 0 0 0.7rem; font-size: 13px; line-height: 1.45;
+  color: var(--fg);
+}
+.demo-progress {
+  display: flex; gap: 4px; margin-bottom: 0.7rem;
+}
+.demo-progress-dot {
+  flex: 1; height: 4px; background: var(--border-2); border-radius: 2px;
+}
+.demo-progress-dot.active { background: var(--accent); }
+.demo-panel-buttons {
+  display: flex; gap: 0.4rem; align-items: center;
+}
+.demo-panel-buttons .btn-inline {
+  padding: 4px 10px; font-size: 12px;
+}

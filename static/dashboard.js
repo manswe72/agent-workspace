@@ -289,6 +289,33 @@
       'tab.messages':           'Messages',
       'empty.dashboard.title':  'No worktrees yet',
       'empty.dashboard.body':   'The dashboard shows one tab per {path}/<issue>/ directory. That root is empty right now — click + Add issue to create your first worktree, or read the docs first.',
+      'demo.btn':               '🎬 Demo tour',
+      'demo.btn.prev':          '◀ Prev',
+      'demo.btn.next':          'Next ▶',
+      'demo.btn.skip':          'Skip',
+      'demo.btn.got-it':        'Got it',
+      'demo.btn.close':         'Close demo',
+      'demo.btn.close-tip':     'Stop the demo and close every modal it opened (Esc also works).',
+      'demo.step.1.title':      'Welcome to Agent Workspace',
+      'demo.step.1.body':       'Agent Workspace turns GitHub issues into local worktrees with an embedded coding-agent terminal. This ~1-minute tour shows what\'s in the box.',
+      'demo.step.2.title':      'Tell the dashboard which repos to track',
+      'demo.step.2.body':       'Profile → Dashboard → GitHub repos. The picker lists every repo your GitHub token can see. Add one or more — that drives the issue list, the per-tab pill, and the Clone buttons.',
+      'demo.step.3.title':      '🐙 GitHub modal',
+      'demo.step.3.body':       'Every open issue and PR in your tracked repos. Three sections: issues assigned to you, unassigned issues you can claim, and open PRs across the repos.',
+      'demo.step.4.title':      '+ Add creates a worktree',
+      'demo.step.4.body':       'Clicking + Add on any row opens a small dialog where you pick which of your repos to clone for THIS workspace (multi-repo issues clone just the relevant subset). For unassigned issues, you can also auto-claim the issue.',
+      'demo.step.5.title':      'Or add a workspace manually',
+      'demo.step.5.body':       'When the work isn\'t tied to a GitHub issue, the + Add issue toolbar button lets you type any name. Names matching `<number>-<slug>` (e.g. 42-fix-auth) auto-link to GitHub issue #42.',
+      'demo.step.6.title':      'Pick your agent CLI',
+      'demo.step.6.body':       'Profile → Agent CLI. Six agent CLIs are supported: Claude Code, OpenAI Codex, Cursor Agent, Aider, Gemini CLI, Crush. Pick one as the default; the 🤖 Agent button on every workspace tab launches it.',
+      'demo.step.7.title':      'Agents talk to each other (MCP mailbox)',
+      'demo.step.7.body':       'Claude, Codex, Cursor and Gemini sessions share a tiny mailbox. From one workspace you can `send_message(to="Alice")` and another agent receives it within seconds — the General Agent (Agent 007) is the always-on hub.',
+      'demo.step.8.title':      '📅 Week summary',
+      'demo.step.8.body':       'Per-week rollup of every workspace you touched: commits, hours logged, tokens, cost (Claude-only today). Use ◀ / ▶ to flip between weeks; past weeks are autofilled on startup.',
+      'demo.step.9.title':      '📝 Notes',
+      'demo.step.9.body':       'Free-text notes per workspace, plus this cross-workspace view. The same modal opens from the 📝 button on any workspace tab. Notes sync across machines via your sync repo if you wire one up.',
+      'demo.step.10.title':     'You\'re set',
+      'demo.step.10.body':      'That\'s the tour. Click + Add issue when you\'re ready to create your first workspace, or open the 🐙 GitHub modal to pick one from your tracked repos.',
       'time.ago':               'ago',
       'time.now':               'just now',
       // Status pills
@@ -13410,6 +13437,216 @@
 
   // The "Starting" tab — only rendered when no issues exist. Hosts
   // the empty-state card with the Add-issue / Help buttons. Lives
+  // ── Demo tour ─────────────────────────────────────────────────────
+  // Eight-step (10-step) product tour shown from the empty-state
+  // card. Each step has a `before` to open the relevant modal /
+  // popover, an `after` to close it before moving on, and the
+  // explanation text. Prev/Next/Skip + Esc + X all stop the tour.
+
+  let demoIdx = -1;
+  const _demoEscHandler = (e) => {
+    if (demoIdx === -1) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      endDemoTour();
+    }
+  };
+
+  function _closeProfilePopover() {
+    document.getElementById('profile-popover')?.classList.remove('open');
+    profilePopoverOpen = false;
+  }
+  function _setProfileTab(tabId) {
+    profileActiveTab = tabId;
+    localStorage.setItem('profile-tab', tabId);
+  }
+  function _openProfileTab(tabId) {
+    _setProfileTab(tabId);
+    profilePopoverOpen = true;
+    // Re-render the popover so the active tab updates synchronously.
+    if (window.__lastState) renderApp(window.__lastState);
+    document.getElementById('profile-popover')?.classList.add('open');
+  }
+  function _closeAddIssueDialog() {
+    document.getElementById('add-issue-dialog')?.remove();
+  }
+  function _closeGithubModal() {
+    if (typeof closeGithubModal === 'function') closeGithubModal();
+  }
+  function _closeWeekSummary() {
+    document.getElementById('week-summary-modal')?.remove();
+    // The week summary engine also tracks its open-state in a
+    // module-level var; closing the DOM is sufficient for the demo.
+  }
+  function _closeNotesModal() {
+    document.getElementById('notes-modal')?.remove();
+  }
+
+  const DEMO_STEPS = [
+    {
+      title: () => t('demo.step.1.title'),
+      body:  () => t('demo.step.1.body'),
+    },
+    {
+      title: () => t('demo.step.2.title'),
+      body:  () => t('demo.step.2.body'),
+      before: () => _openProfileTab('dashboard'),
+      after:  () => _closeProfilePopover(),
+    },
+    {
+      title: () => t('demo.step.3.title'),
+      body:  () => t('demo.step.3.body'),
+      before: () => openGithubModal(),
+      after:  () => _closeGithubModal(),
+    },
+    {
+      title: () => t('demo.step.4.title'),
+      body:  () => t('demo.step.4.body'),
+      before: () => openGithubModal(),    // stays open
+      after:  () => _closeGithubModal(),
+    },
+    {
+      title: () => t('demo.step.5.title'),
+      body:  () => t('demo.step.5.body'),
+      before: () => openAddIssueDialog(),
+      after:  () => _closeAddIssueDialog(),
+    },
+    {
+      title: () => t('demo.step.6.title'),
+      body:  () => t('demo.step.6.body'),
+      before: () => _openProfileTab('agent'),
+      after:  () => _closeProfilePopover(),
+    },
+    {
+      title: () => t('demo.step.7.title'),
+      body:  () => t('demo.step.7.body'),
+      before: () => _openProfileTab('agent'),
+      after:  () => _closeProfilePopover(),
+    },
+    {
+      title: () => t('demo.step.8.title'),
+      body:  () => t('demo.step.8.body'),
+      before: () => openWeekSummary(),
+      after:  () => _closeWeekSummary(),
+    },
+    {
+      title: () => t('demo.step.9.title'),
+      body:  () => t('demo.step.9.body'),
+      before: () => openNotesModal(null, { allMode: true }),
+      after:  () => _closeNotesModal(),
+    },
+    {
+      title: () => t('demo.step.10.title'),
+      body:  () => t('demo.step.10.body'),
+    },
+  ];
+
+  function startDemoTour() {
+    if (demoIdx !== -1) return;
+    demoIdx = 0;
+    document.addEventListener('keydown', _demoEscHandler);
+    renderDemoStep();
+  }
+
+  function endDemoTour() {
+    // Close any modal the current step left open before tearing
+    // the overlay down.
+    if (demoIdx >= 0 && demoIdx < DEMO_STEPS.length) {
+      try { DEMO_STEPS[demoIdx].after?.(); } catch (_) {}
+    }
+    demoIdx = -1;
+    document.removeEventListener('keydown', _demoEscHandler);
+    document.getElementById('demo-overlay')?.remove();
+  }
+
+  function _stepTo(newIdx) {
+    const oldStep = DEMO_STEPS[demoIdx];
+    const newStep = DEMO_STEPS[newIdx];
+    if (oldStep && oldStep.after) {
+      try { oldStep.after(); } catch (_) {}
+    }
+    demoIdx = newIdx;
+    if (newStep && newStep.before) {
+      try { newStep.before(); } catch (_) {}
+    }
+    renderDemoStep();
+  }
+
+  function nextDemoStep() {
+    if (demoIdx >= DEMO_STEPS.length - 1) {
+      endDemoTour();
+      return;
+    }
+    _stepTo(demoIdx + 1);
+  }
+
+  function prevDemoStep() {
+    if (demoIdx <= 0) return;
+    _stepTo(demoIdx - 1);
+  }
+
+  function renderDemoStep() {
+    document.getElementById('demo-overlay')?.remove();
+    if (demoIdx < 0 || demoIdx >= DEMO_STEPS.length) return;
+    const step = DEMO_STEPS[demoIdx];
+    const isLast = demoIdx === DEMO_STEPS.length - 1;
+
+    // Run the step's `before` on first render of THIS step. (It
+    // already ran in _stepTo when we navigated here; safe to skip
+    // when re-rendering after layout shifts. We track this via the
+    // initial entry from startDemoTour where _stepTo wasn't called.)
+    if (demoIdx === 0 && !document.getElementById('demo-overlay-rendered-once')) {
+      // Step 1 has no `before`, so nothing to do. The flag below
+      // marks that the engine has run at least once this session.
+      const marker = document.createElement('meta');
+      marker.id = 'demo-overlay-rendered-once';
+      document.head.appendChild(marker);
+    }
+
+    const progress = h('div', { class: 'demo-progress' });
+    for (let i = 0; i < DEMO_STEPS.length; i++) {
+      progress.append(h('span', {
+        class: 'demo-progress-dot' + (i <= demoIdx ? ' active' : ''),
+      }));
+    }
+
+    const panel = h('div', { class: 'demo-panel', role: 'dialog',
+                              'aria-labelledby': 'demo-panel-title' },
+      h('button', {
+        type: 'button', class: 'demo-close-btn',
+        title: t('demo.btn.close-tip'),
+        'aria-label': t('demo.btn.close'),
+        onclick: () => endDemoTour(),
+      }, '✕'),
+      h('div', { class: 'demo-step-count' },
+        `${demoIdx + 1} / ${DEMO_STEPS.length}`),
+      h('h3', { id: 'demo-panel-title', class: 'demo-panel-title' },
+        step.title()),
+      h('p', { class: 'demo-panel-body' }, step.body()),
+      progress,
+      h('div', { class: 'demo-panel-buttons' },
+        h('button', {
+          type: 'button', class: 'btn btn-inline',
+          disabled: (demoIdx === 0) ? '' : null,
+          onclick: () => prevDemoStep(),
+        }, t('demo.btn.prev')),
+        h('button', {
+          type: 'button', class: 'btn btn-inline',
+          onclick: () => endDemoTour(),
+        }, t('demo.btn.skip')),
+        h('span', { style: { flex: '1' } }),
+        h('button', {
+          type: 'button', class: 'btn btn-inline btn-primary',
+          onclick: () => isLast ? endDemoTour() : nextDemoStep(),
+        }, isLast ? t('demo.btn.got-it') : t('demo.btn.next')),
+      ),
+    );
+    const overlay = h('div', { id: 'demo-overlay' },
+      h('div', { class: 'demo-backdrop' }),
+      panel);
+    document.body.append(overlay);
+  }
+
   // alongside the Agent tab (also pinned) so the user can flip
   // between agent and guidance even on an empty dashboard.
   function buildStartingSection(state) {
@@ -13441,6 +13678,11 @@
             class: 'btn',
             onclick: () => openHelpOverlay(),
           }, t('toolbar.help')),
+          h('button', {
+            class: 'btn',
+            type: 'button',
+            onclick: () => startDemoTour(),
+          }, t('demo.btn')),
         ),
       ),
     );
