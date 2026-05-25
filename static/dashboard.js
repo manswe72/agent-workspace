@@ -301,7 +301,7 @@
       'demo.step.1.title':      'Welcome to Agent Workspace',
       'demo.step.1.body':       'Agent Workspace turns GitHub issues into local worktrees with an embedded coding-agent terminal. This ~1-minute tour shows what\'s in the box.',
       'demo.step.2.title':      'Tell the dashboard which repos to track',
-      'demo.step.2.body':       'Profile → Dashboard → GitHub repos. The picker lists every repo your GitHub token can see. Add one or more — that drives the issue list, the per-tab pill, and the Clone buttons.',
+      'demo.step.2.body':       'Profile → GitHub. Paste your Personal Access Token, then add the repos you want tracked — the picker lists every repo your token can see. Both drive the issue list, the per-tab pill, and the Clone buttons.',
       'demo.step.3.title':      '🐙 GitHub modal',
       'demo.step.3.body':       'Every open issue and PR in your tracked repos. Three sections: issues assigned to you, unassigned issues you can claim, and open PRs across the repos.',
       'demo.step.4.title':      '+ Add creates a worktree',
@@ -311,7 +311,7 @@
       'demo.step.6.title':      'Pick your agent CLI',
       'demo.step.6.body':       'Profile → Agent CLI. Six agent CLIs are supported: Claude Code, OpenAI Codex, Cursor Agent, Aider, Gemini CLI, Crush. Pick one as the default; the 🤖 Agent button on every workspace tab launches it.',
       'demo.step.7.title':      'Agents talk to each other (MCP mailbox)',
-      'demo.step.7.body':       'Claude, Codex, Cursor and Gemini sessions share a tiny mailbox. From one workspace you can `send_message(to="Alice")` and another agent receives it within seconds — the General Agent (Agent 007) is the always-on hub.',
+      'demo.step.7.body':       'Claude, Codex, Cursor and Gemini sessions share a tiny mailbox. `send_message(to="Alice")` from one workspace lands in another\'s inbox in seconds. The General Agent (Agent 007) is the always-on hub: from there `delegate(...)` hands tracked work to a spoke and the 🎯 Delegations sub-tab is the status board.',
       'demo.step.8.title':      '📅 Week summary',
       'demo.step.8.body':       'Per-week rollup of every workspace you touched: commits, hours logged, tokens, cost (Claude-only today). Use ◀ / ▶ to flip between weeks; past weeks are autofilled on startup.',
       'demo.step.9.title':      '📝 Notes',
@@ -536,6 +536,11 @@
       'issue.subtab.branches':  'Branches',
       'issue.subtab.agent':     'Agent',
       'issue.subtab.messages':  'Messages',
+      'issue.subtab.delegations':'Delegations',
+      'delegations.empty':      'No delegations.',
+      'delegations.status.any': 'All',
+      'delegations.status.open':'Open',
+      'delegations.status.resolved':'Resolved',
       'issue.subtab.stashes':   'Stashes',
       'stashes.empty':          'No stashes',
       'stashes.title':          'Stashes',
@@ -1100,6 +1105,11 @@
       'issue.subtab.branches':  'Brancher',
       'issue.subtab.agent':     'Agent',
       'issue.subtab.messages':  'Meddelanden',
+      'issue.subtab.delegations':'Delegationer',
+      'delegations.empty':      'Inga delegationer.',
+      'delegations.status.any': 'Alla',
+      'delegations.status.open':'Öppna',
+      'delegations.status.resolved':'Avklarade',
       'issue.subtab.stashes':   'Stashar',
       'stashes.empty':          'Inga stashar',
       'stashes.title':          'Stashar',
@@ -11009,6 +11019,151 @@
     document.body.append(modal);
   }
 
+  // Delegations pane for the 🎯 Delegations sub-tab. When `scope`
+  // is "all" (used by the General Agent panel), shows every
+  // delegation in the system. When scope is the canonical id of a
+  // spoke (used by per-issue panels), shows only delegations
+  // addressed to that spoke. Self-polls every 5s while visible.
+  function buildDelegationsPaneFor(scope) {
+    const isAll = scope === 'all';
+    const listHost = h('div', { class: 'mcp-msg-list' },
+      h('span', { class: 'muted' }, 'loading…'));
+    // Filter state: open / resolved / any. Persisted in
+    // localStorage so the user keeps the same view across reloads.
+    const STATUS_KEY = 'delegations-status';
+    let statusFilter = localStorage.getItem(STATUS_KEY) || 'any';
+    if (!['any', 'open', 'resolved'].includes(statusFilter)) {
+      statusFilter = 'any';
+    }
+    let cachedRows = [];
+
+    const ageString = (created_at) => {
+      if (!created_at) return '';
+      const secs = Math.max(0, Math.floor(Date.now() / 1000)
+                                  - Number(created_at));
+      if (secs < 60) return `${secs}s ago`;
+      if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
+      if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
+      return `${Math.floor(secs / 86400)}d ago`;
+    };
+
+    function agentLabel(id) {
+      if (id === '__agent__') return t('tab.generic-agent');
+      const names = (window.__lastState?.workspace_names) || {};
+      const friendly = names[id];
+      return friendly ? `${friendly} · ${id}` : (id || '—');
+    }
+
+    function renderList() {
+      const rows = cachedRows;
+      if (!rows.length) {
+        listHost.replaceChildren(h('div', { class: 'muted',
+            style: { padding: '0.5rem 0' } },
+          t('delegations.empty')));
+        return;
+      }
+      const items = rows.map((d) => {
+        const open = d.status !== 'resolved';
+        const pill = h('span', {
+          class: 'pill ' + (open ? 'unpushed' : 'clean'),
+          style: { marginRight: '0.4rem' },
+        }, open ? '🟢 open' : '✓ resolved');
+        const headLine = h('div', { class: 'mcp-msg-head' },
+          pill,
+          h('span', { class: 'mcp-msg-from' },
+            `${agentLabel(d.from_agent)} → ${agentLabel(d.to_agent)}`),
+          h('span', { class: 'mcp-msg-age',
+            style: { marginLeft: '0.5rem' } },
+            ageString(d.created_at)),
+        );
+        const taskLine = h('div', { class: 'mcp-msg-text',
+          style: { fontWeight: '600' } }, d.task || '');
+        const children = [headLine, taskLine];
+        if (d.context) {
+          children.push(h('div', { class: 'mcp-msg-text muted',
+            style: { whiteSpace: 'pre-wrap',
+                      marginTop: '0.2rem' } },
+            d.context));
+        }
+        if (d.deadline) {
+          children.push(h('div', { class: 'muted',
+            style: { fontSize: '11px', marginTop: '0.2rem' } },
+            'Deadline: ' + d.deadline));
+        }
+        if (!open && d.reply_text) {
+          children.push(h('div', { class: 'mcp-msg-text',
+            style: { borderLeft: '3px solid var(--accent)',
+                      paddingLeft: '0.6rem',
+                      marginTop: '0.4rem',
+                      whiteSpace: 'pre-wrap' } },
+            h('span', { class: 'muted',
+              style: { fontSize: '11px' } },
+              `↩ ${agentLabel(d.resolved_by)} replied: `),
+            d.reply_text));
+        }
+        return h('div', { class: 'mcp-msg-row',
+          'data-delegation-id': d.id }, ...children);
+      });
+      listHost.replaceChildren(...items);
+    }
+
+    async function reload() {
+      const qs = new URLSearchParams();
+      qs.set('status', statusFilter);
+      qs.set('limit', '100');
+      if (!isAll) {
+        qs.set('agent', scope);
+        qs.set('to_me', '1');
+      }
+      try {
+        const r = await fetch('/api/mcp/delegations?' + qs.toString(),
+          { cache: 'no-store' });
+        const d = await r.json();
+        cachedRows = Array.isArray(d.delegations) ? d.delegations : [];
+      } catch (_) {
+        cachedRows = [];
+      }
+      renderList();
+    }
+
+    function setStatus(next) {
+      if (next === statusFilter) return;
+      statusFilter = next;
+      localStorage.setItem(STATUS_KEY, next);
+      filterBtns.forEach((b) =>
+        b.classList.toggle('active', b.dataset.status === next));
+      reload();
+    }
+
+    const filterBtns = ['any', 'open', 'resolved'].map((s) =>
+      h('button', {
+        class: 'btn btn-inline'
+                + (statusFilter === s ? ' active' : ''),
+        'data-status': s,
+        onclick: () => setStatus(s),
+      }, t('delegations.status.' + s)));
+
+    const refreshBtn = h('button', {
+      class: 'btn btn-inline',
+      title: 'Reload delegations',
+      onclick: () => reload(),
+    }, '↻');
+
+    const delegationsControlsRow = h('div', {
+      class: 'agent-controls mcp-msg-controls-row',
+    }, ...filterBtns, refreshBtn);
+
+    const pane = h('div', { class: 'mcp-pane' }, listHost);
+    pane._controlsRow = delegationsControlsRow;
+    pane.reloadDelegations = reload;
+    reload();
+    const pollId = setInterval(() => {
+      if (!pane.isConnected) { clearInterval(pollId); return; }
+      reload();
+    }, 5000);
+    return pane;
+  }
+
   // Git-stash pane for the General Agent → Stashes sub-tab. Lists
   // every stash across primary repos (--primaries root). Adding
   // stashes is intentionally left to the agent (git stash push in
@@ -13932,6 +14087,14 @@
       id: 'issue-sub-stashes-__agent__',
       class: 'issue-subpanel issue-messages-panel',
     }, stashesPane);
+    // Delegations pane — scope='all' on the General Agent so the
+    // hub sees every delegation across the system. The pane self-
+    // polls every 5s while in the DOM.
+    const delegationsPane = buildDelegationsPaneFor('all');
+    const delegationsWrap = h('div', {
+      id: 'issue-sub-delegations-__agent__',
+      class: 'issue-subpanel issue-messages-panel',
+    }, delegationsPane);
 
     // Sub-tab strip — same shape as the per-issue Branches/Agent
     // strip: horizontal icon-only buttons with the active tab also
@@ -13954,20 +14117,26 @@
         subActions.append(messagesPane._controlsRow);
       } else if (cur === 'stashes' && stashesPane._controlsRow) {
         subActions.append(stashesPane._controlsRow);
+      } else if (cur === 'delegations' && delegationsPane._controlsRow) {
+        subActions.append(delegationsPane._controlsRow);
       }
     };
     const activate = (id) => {
       perIssueAgentSub.set('__agent__', id);
       subBar.querySelectorAll('.issue-subtab').forEach((b) =>
         b.classList.toggle('active', b.dataset.issueSub === id));
-      agentPanel.style.display    = id === 'agent'    ? '' : 'none';
-      messagesWrap.style.display  = id === 'messages' ? '' : 'none';
-      stashesWrap.style.display   = id === 'stashes'  ? '' : 'none';
+      agentPanel.style.display      = id === 'agent'      ? '' : 'none';
+      messagesWrap.style.display    = id === 'messages'   ? '' : 'none';
+      stashesWrap.style.display     = id === 'stashes'    ? '' : 'none';
+      delegationsWrap.style.display = id === 'delegations'? '' : 'none';
       if (id === 'messages' && messagesPane.reloadMessages) {
         messagesPane.reloadMessages();
       }
       if (id === 'stashes' && stashesPane.reloadStashes) {
         stashesPane.reloadStashes();
+      }
+      if (id === 'delegations' && delegationsPane.reloadDelegations) {
+        delegationsPane.reloadDelegations();
       }
       refreshSubActions();
       // When flipping back to the Agent sub-tab from Messages,
@@ -14005,9 +14174,10 @@
       h('span', { class: 'issue-subtab-label' }, label),
     );
     subBar.append(
-      mkSubBtn('agent',    agentIconNode(), t('issue.subtab.agent')),
-      mkSubBtn('messages', '📬', t('issue.subtab.messages')),
-      mkSubBtn('stashes',  '💾', t('issue.subtab.stashes')),
+      mkSubBtn('agent',       agentIconNode(), t('issue.subtab.agent')),
+      mkSubBtn('messages',    '📬', t('issue.subtab.messages')),
+      mkSubBtn('delegations', '🎯', t('issue.subtab.delegations')),
+      mkSubBtn('stashes',     '💾', t('issue.subtab.stashes')),
     );
     // Initial population of the right-side slot (Agent is the default
     // active sub-tab).
@@ -14021,9 +14191,10 @@
     // panel), the new messagesWrap was constructed with inline
     // display:none and never flipped back — the user saw an empty
     // panel after every refresh.
-    agentPanel.style.display    = subActive === 'agent'    ? '' : 'none';
-    messagesWrap.style.display  = subActive === 'messages' ? '' : 'none';
-    stashesWrap.style.display   = subActive === 'stashes'  ? '' : 'none';
+    agentPanel.style.display      = subActive === 'agent'      ? '' : 'none';
+    messagesWrap.style.display    = subActive === 'messages'   ? '' : 'none';
+    stashesWrap.style.display     = subActive === 'stashes'    ? '' : 'none';
+    delegationsWrap.style.display = subActive === 'delegations'? '' : 'none';
 
     return h('div', {
       class: 'issue-body-wrap general-agent-body-wrap'
@@ -14031,7 +14202,7 @@
     },
       subRow,
       h('div', { class: 'issue-body-content' },
-        agentPanel, messagesWrap, stashesWrap),
+        agentPanel, messagesWrap, delegationsWrap, stashesWrap),
     );
   }
 
@@ -14103,7 +14274,7 @@
     {
       title: () => t('demo.step.2.title'),
       body:  () => t('demo.step.2.body'),
-      before: () => _openProfileTab('dashboard'),
+      before: () => _openProfileTab('github'),
       after:  () => _closeProfilePopover(),
     },
     {

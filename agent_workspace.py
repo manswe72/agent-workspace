@@ -5178,6 +5178,47 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                     "messages": items,
                 })
 
+            elif path == "/api/mcp/delegations":
+                # Delegations sub-tab data source. Query string:
+                #   ?status=any|open|resolved (default any)
+                #   ?agent=<id>&to_me=1   (filter to delegations addressed
+                #                          to this agent — used by spoke
+                #                          panels)
+                #   ?agent=<id>&mine_only=1 (filter to delegations I sent —
+                #                            used by the General Agent
+                #                            panel when it's both hub
+                #                            and a participant)
+                #   ?limit=N (default 100, capped at 500)
+                status = (qs.get("status", ["any"])[0] or "any").lower()
+                if status not in ("open", "resolved", "any"):
+                    status = "any"
+                agent = (qs.get("agent", [""])[0] or "").strip()
+                to_me = qs.get("to_me", ["0"])[0] in ("1", "true", "yes")
+                mine_only = qs.get("mine_only", ["0"])[0] in (
+                    "1", "true", "yes")
+                try:
+                    limit = max(1, min(500, int(qs.get("limit", ["100"])[0])))
+                except (TypeError, ValueError):
+                    limit = 100
+                conn = db_connect()
+                try:
+                    items = agent_mcp.list_delegations(
+                        conn,
+                        from_agent=(agent if mine_only else None),
+                        to_agent=(agent if to_me else None),
+                        status=status,
+                        limit=limit,
+                    )
+                finally:
+                    conn.close()
+                self._send_json(200, {
+                    "status": status,
+                    "agent": agent,
+                    "to_me": to_me,
+                    "mine_only": mine_only,
+                    "delegations": items,
+                })
+
             elif path == "/api/preferences":
                 conn = db_connect()
                 try:
