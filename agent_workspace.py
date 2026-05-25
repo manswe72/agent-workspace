@@ -3222,8 +3222,9 @@ _NUDGE_SUBMIT_DELAY = 0.08
 
 
 def _mailbox_auto_poll_enabled() -> bool:
-    """User-pref gate: defaults to OFF. Re-read every cycle so the
-    toggle in Profile takes effect without restart."""
+    """User-pref gate: defaults to ON for a fresh install. Re-read
+    every cycle so the toggle in Profile takes effect without
+    restart."""
     try:
         conn = db_connect()
         try:
@@ -3231,8 +3232,8 @@ def _mailbox_auto_poll_enabled() -> bool:
         finally:
             conn.close()
     except Exception:
-        return False
-    return _pref_truthy(raw, default=False)
+        return True
+    return _pref_truthy(raw, default=True)
 
 
 def mailbox_auto_poll_loop() -> None:

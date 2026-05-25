@@ -663,7 +663,7 @@
       'profile.help.mcp-enabled':    'Exposes send_message / read_messages / request_review MCP tools to each agent and surfaces unread mail as a 📬 badge on the tab. Off launches agents without the tools registered.',
       'profile.mailbox-auto-poll':       'Mailbox auto-poll',
       'profile.mailbox-auto-poll.label': 'Nudge idle agents about unread mail',
-      'profile.help.mailbox-auto-poll':  'Once a minute, if an attached agent has unread messages and the user has been idle in its terminal for at least 30s, the dashboard writes a synthetic prompt asking the agent to call read_messages and reply. Throttled per agent so a slow read does not get repeatedly poked. Off by default — leave off while you test.',
+      'profile.help.mailbox-auto-poll':  'Once a minute, if an attached agent has unread messages and the user has been idle in its terminal for at least 30s, the dashboard writes a synthetic prompt asking the agent to call read_messages and reply. Throttled per agent so a slow read does not get repeatedly poked. On by default — turn off if the synthetic prompts feel intrusive.',
       'profile.auto-update-check':       'Dashboard auto-update check',
       'profile.auto-update-check.label': 'Watch this repo for new commits on origin',
       'profile.help.auto-update-check':  'Every 10 minutes the server runs `git fetch origin` against the dashboard repo and shows a banner when there are new commits. Off hides the banner; the server stays on the version you launched. The actual pull + restart is always opt-in via the Update now button.',
@@ -1181,7 +1181,7 @@
       'profile.help.mcp-enabled':    'Exponerar verktygen send_message / read_messages / request_review till varje agent och visar olästa meddelanden som en 📬-symbol på fliken. Av startar agenter utan verktygen registrerade.',
       'profile.mailbox-auto-poll':       'Automatisk inkorgskoll',
       'profile.mailbox-auto-poll.label': 'Puffa inaktiva agenter om olästa meddelanden',
-      'profile.help.mailbox-auto-poll':  'En gång per minut: om en ansluten agent har olästa meddelanden och användaren har varit inaktiv i terminalen i minst 30 s skriver dashboarden in en syntetisk prompt som ber agenten anropa read_messages och svara. Strypt per agent så en långsam läsning inte puffas om och om igen. Av som standard — låt den vara av under testning.',
+      'profile.help.mailbox-auto-poll':  'En gång per minut: om en ansluten agent har olästa meddelanden och användaren har varit inaktiv i terminalen i minst 30 s skriver dashboarden in en syntetisk prompt som ber agenten anropa read_messages och svara. Strypt per agent så en långsam läsning inte puffas om och om igen. På som standard — slå av om de syntetiska prompterna känns påträngande.',
       'profile.auto-update-check':       'Uppdateringskontroll',
       'profile.auto-update-check.label': 'Bevaka repot för nya commits på origin',
       'profile.help.auto-update-check':  'Var tionde minut kör servern `git fetch origin` mot dashboard-repot och visar en banner när det finns nya commits. Av döljer bannern; servern stannar kvar på den version du startade. Själva pull + omstart sker alltid via Uppdatera nu-knappen.',
@@ -8950,9 +8950,11 @@
   }
   function mailboxAutoPollOn() {
     const v = prefs.getItem('mailbox-auto-poll');
-    // Default OFF — synthetic prompts injected into an agent's pty
-    // are intrusive enough that the user should opt in explicitly.
-    return v === '1';
+    // Default ON for a fresh install — nudging idle agents about
+    // unread mail is what makes the mailbox feel responsive. Users
+    // who find the synthetic prompts intrusive can flip the toggle
+    // off in Profile → Dashboard.
+    return v === null || v === undefined || v === '' || v === '1';
   }
   function autoUpdateCheckOn() {
     const v = prefs.getItem('auto-update-check');
