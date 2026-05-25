@@ -28,3 +28,8 @@ class CursorProvider(AgentProvider):
             f"cursor-agent resume{model_arg} 2>/dev/null "
             f"|| cursor-agent{model_arg}"
         )
+
+    def supports_mcp(self) -> bool:
+        # Cursor reads MCP servers from ~/.cursor/mcp.json. Dashboard
+        # doesn't auto-inject — same caveat as Codex / Gemini.
+        return True

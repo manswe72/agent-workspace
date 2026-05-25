@@ -40,6 +40,13 @@ class CodexProvider(AgentProvider):
         )
 
 
+    def supports_mcp(self) -> bool:
+        # Codex CLI reads MCP servers from ~/.codex/config.toml under
+        # [mcp_servers]. The dashboard doesn't auto-inject; users can
+        # add the dashboard's /mcp?agent=<id> URL by hand if they want
+        # the cross-agent mailbox from Codex sessions.
+        return True
+
     def model_pricing(self) -> dict[str, dict[str, float]]:
         # Best-effort defaults; users override via the dashboard's
         # pricing.json. Cache pricing left at 0 — Codex doesn't surface

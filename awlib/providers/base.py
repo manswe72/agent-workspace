@@ -121,6 +121,17 @@ class AgentProvider(ABC):
         return []
 
     def supports_mcp(self) -> bool:
+        """The CLI itself speaks MCP as a client. Used by the dashboard
+        UI to decide whether to surface MCP-related affordances for
+        this provider."""
+        return False
+
+    def auto_registers_mcp(self) -> bool:
+        """The dashboard auto-injects its in-process MCP server into
+        this CLI's launch line. Only Claude Code today, because
+        every CLI accepts MCP config differently (flag vs. TOML vs.
+        JSON in its own dotdir). Users of other MCP-capable providers
+        can wire it themselves — see README."""
         return False
 
     def supports_hooks(self) -> bool:

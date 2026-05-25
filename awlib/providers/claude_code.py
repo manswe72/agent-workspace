@@ -90,5 +90,8 @@ class ClaudeCodeProvider(AgentProvider):
     def supports_mcp(self) -> bool:
         return True
 
+    def auto_registers_mcp(self) -> bool:
+        return True
+
     def supports_hooks(self) -> bool:
         return True

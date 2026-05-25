@@ -29,6 +29,12 @@ class GeminiProvider(AgentProvider):
         model_arg = f" --model {shlex.quote(model)}" if model else ""
         return f"{liveness}gemini{model_arg}"
 
+    def supports_mcp(self) -> bool:
+        # Gemini CLI reads MCP servers from ~/.gemini/settings.json
+        # under "mcpServers". Same story as Codex — capability exists
+        # in the CLI; dashboard doesn't auto-inject yet.
+        return True
+
     def model_pricing(self) -> dict[str, dict[str, float]]:
         return {
             "gemini:gemini-2.5-pro":   {"in": 1.25, "out": 5.00, "cache_r": 0.0, "cache_w": 0.0},

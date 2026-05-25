@@ -1,15 +1,80 @@
 # Agent Workspace · Status Board
 
-A local HTTP dashboard for `~/github/worktrees/<issue>/<repo>` — your
-**Agent Workspace · Status Board**. Shows git status across every
-active issue branch, time tracking, week summaries, agent
-events from Claude Code hooks, and a server diagnostics console. Light /
-dark theme via system preference, auto-refresh every 5 minutes.
+A local HTTP dashboard for `~/github/worktrees/<workspace>/<repo>` —
+your **Agent Workspace · Status Board**. Shows git status across
+every active worktree branch, time tracking, week summaries, and a
+server diagnostics console. Pluggable coding-agent CLI launcher
+(Claude Code, OpenAI Codex CLI, Aider, Gemini CLI, Cursor Agent,
+Crush). GitHub-native: per-workspace issue and PR pills, opt-in
+multi-repo cloning per workspace.
 
 Single-file Python stdlib server (no deps), SQLite cache, vanilla JS
-frontend. The server is read-only against your worktrees — it never runs
-git mutations on your behalf — but it does ingest events that Claude Code
-posts via hooks (see *Agent events* below).
+frontend. The server is read-only against your worktrees — it never
+runs git mutations on your behalf. When you use the Claude Code
+provider it can additionally ingest events posted via hooks (see
+*Claude Code provider* below).
+
+## Agent CLI providers
+
+Six providers ship out of the box. Pick one in **Profile → Agent
+CLI**. The dashboard auto-detects which are on PATH; rows for
+missing binaries are greyed out until you install the tool.
+
+| Provider | Binary | Install | Resume in cwd | MCP | Hooks |
+|---|---|---|---|---|---|
+| Claude Code (Anthropic) | `claude` | `npm install -g @anthropic-ai/claude-code` | `claude --continue` | ✓ | ✓ |
+| OpenAI Codex CLI | `codex` | `npm install -g @openai/codex` | `codex resume --last` | — | — |
+| Aider (open source) | `aider` | `pipx install aider-chat` | auto (`.aider.chat.history.md`) | — | — |
+| Gemini CLI (open source) | `gemini` | `npm install -g @google/gemini-cli` | `/chat resume <tag>` (interactive) | — | — |
+| Cursor Agent | `cursor-agent` | `curl https://cursor.com/install -fsS \| bash` | `cursor-agent resume` | — | — |
+| Crush (Charm, open source) | `crush` | `go install github.com/charmbracelet/crush/cmd/crush@latest` | per-cwd, interactive | — | — |
+
+The launcher gives every provider the same workspace context (cwd,
+branch, system prompt) and tracks session liveness via either the
+provider's own session log (Claude Code) or a marker file the launcher
+touches every 30 s (everything else). The MCP-based agent-to-agent
+mailbox and the event-hook → `/api/events` route only fire on the
+Claude Code provider — see *Claude Code provider* below.
+
+## GitHub integration
+
+The dashboard treats GitHub as the source of truth for what
+**issues** and **PRs** map to a workspace. There's no `.conf` file —
+configuration lives in two places:
+
+| What | Where | Why |
+|---|---|---|
+| Repo list (`owner/repo`, one or more) | Dashboard preference `github-repos`, editable in **Profile → Dashboard → GitHub repos** | Non-sensitive; lives in SQLite next to the rest of your prefs. |
+| Personal access token | `$GITHUB_TOKEN` env var, or `~/.config/agent-workspace/github-token` (chmod 600) | Kept out of plaintext SQLite/backups. Used for REST list calls + `git clone` over HTTPS via `GIT_ASKPASS`. |
+
+Generate a **fine-grained PAT** at
+https://github.com/settings/personal-access-tokens with **Pull
+requests: Read** + **Contents: Read** on the repos in your list.
+Anonymous fetches work for public repos at 60 req/h; authenticated
+calls get 5000 req/h.
+
+### What you see
+
+- **Per-tab pill** — workspaces named `<num>-<slug>` (e.g.
+  `42-fix-auth`) auto-link to issue `#42`. A green `#42` pill on
+  the tab opens the issue; a `PR` pill appears next to it when a
+  PR's head branch matches the workspace name.
+- **🐙 GitHub modal** (toolbar button) — two tables:
+  - **Issues assigned to you** — Repo / # / Title / State / Workspace
+    / Model / Actions columns. **+ Add** opens a per-issue dialog
+    with checkboxes for each configured repo (defaults to all) so
+    multi-repo issues can clone just the relevant subset.
+    **🗑 Remove** walks `/api/issue/remove` and surfaces partial
+    failures.
+  - **Open PRs you authored** — Repo / # / Title / State / Workspace
+    columns. Same workspace-existence indicator as the issues table.
+- **Missing-primary banner** — auto-derived from the `github-repos`
+  preference. Clone buttons use `https://github.com/<owner>/<repo>.git`
+  with your PAT via `GIT_ASKPASS`; the token never lands in
+  `.git/config` or `ps` output.
+
+If `github-repos` is empty, all of the GitHub UI is hidden and the
+dashboard works as a plain worktree-watcher.
 
 ## What's on the dashboard
 
@@ -55,10 +120,12 @@ Inside each tab:
   block's 🤖. Inside: four inner tabs — *Working tree* / *Last commits*
   (now sized to your full ahead-of-master count, capped at 200) / *Unpushed*
   / *Authors*.
-- **🤖 Claude agent**: per-issue rollup of session activity (token totals,
-  cost, top tools, last prompt, …). Two inner tabs: *Activity* and
-  *Messages*. Messages shows recent agent events with read/unread
-  styling — auto-marked read when the pane is opened.
+- **🤖 Agent**: per-workspace agent terminal + activity panel.
+  Launches whichever CLI you picked in Profile → Agent CLI.
+  When using the Claude Code provider this also shows a session
+  rollup (token totals, cost, top tools, last prompt) parsed from
+  `~/.claude/projects/<encoded>/*.jsonl`; for other providers the
+  panel is launcher-only (no per-message activity yet).
 
 ## Quick start
 
@@ -68,10 +135,10 @@ cd ~/github/agent-workspace
 ./setup.sh
 ```
 
-`setup.sh` checks prerequisites (Python ≥ 3.10, git), symlinks the binaries
-into `~/.local/bin`, installs bash completions
-credentials, and offers to wire Claude Code hooks. On Linux it also drops a
-**Claude Workspace** app-launcher entry under
+`setup.sh` checks prerequisites (Python ≥ 3.10, git), symlinks the
+binaries into `~/.local/bin`, installs bash completions, and offers
+to wire Claude Code hooks (Claude Code provider only). On Linux it
+also drops an **Agent Workspace** app-launcher entry under
 `~/.local/share/applications/` (so the dashboard shows up in your system
 menu / dock — clicking it starts the server if needed and opens the
 dashboard) and offers to register an autostart entry so the server
@@ -255,27 +322,64 @@ The dashboard doubles as a worklog system:
 All tables (by-issue, work logs, week list) are click-to-sort with
 direction toggle and per-table state in `localStorage`.
 
-## Agent events (Claude Code hooks)
+## Claude Code provider
 
-Claude Code can post events to the dashboard via hooks. Run
-`./setup.sh --enable-claude-hooks` (idempotent) to merge entries into
-`~/.claude/settings.json` for `Stop`, `Notification`, `UserPromptSubmit`,
-`SessionStart`, and `SessionEnd`. The hook script
+Two integrations only exist for the Claude Code provider because they
+depend on Claude-specific data formats. Other providers run as plain
+launchers.
+
+### Session activity (`~/.claude/projects/`)
+
+Claude Code writes each session's prompts, tool calls, and token
+usage as JSONL files under `~/.claude/projects/<encoded-cwd>/*.jsonl`.
+The dashboard tails those files to produce:
+
+- Per-workspace token / cost rollup in the 🤖 Agent panel
+- `last_claude_prompt` excerpts in the activity feed
+- Live `active` / `idle` / `closed` state pills (≤5 min mtime = active,
+  ≤24 h = idle, else closed)
+
+When the active provider is anything other than Claude Code, the
+dashboard falls back to a much simpler "is the launcher's marker
+file fresh?" check (≤5 min = active, ≤24 h = idle). Tokens and cost
+are not displayed for non-Claude providers — their CLIs don't write
+a comparably structured log on disk.
+
+### Hooks (`~/.claude/settings.json`)
+
+Claude Code lets the user wire arbitrary scripts into lifecycle
+events. Run `./setup.sh --enable-claude-hooks` (idempotent) to merge
+entries into `~/.claude/settings.json` for `Stop`, `Notification`,
+`UserPromptSubmit`, `SessionStart`, and `SessionEnd`. The hook script
 `bin/agent-event-notify`:
 - POSTs `{kind, issue, session_id, message, cwd}` to `/api/events`
 - fires `notify-send` for `Notification` + `Stop` events on Linux
 
-The dashboard surfaces unread events as a `🔔N` pill on the issue tab and
-in the per-issue agent block's *Messages* pane. Marking events read
-clears the badge. Disable any time with `./setup.sh --disable-claude-hooks`.
+The dashboard surfaces unread events as a `🔔N` pill on the workspace
+tab and in the 🤖 Agent block's *Messages* pane. Marking events read
+clears the badge. Disable any time with
+`./setup.sh --disable-claude-hooks`. No equivalent hook system exists
+for Codex, Aider, Gemini, Cursor, or Crush, so these events fire only
+under the Claude Code provider.
 
-## Agent-to-agent messaging (agent-workspace MCP)
+### Agent-to-agent messaging (MCP)
 
-Every agent the dashboard launches (per-issue Inline Agent + the pinned
-General Agent) gets an in-process MCP server registered automatically so
-agents can talk to each other. The server's slug is
-`agentic-engineering`; tools appear in `/mcp` inside any claude session
-spawned through the dashboard:
+**MCP itself is an open protocol** — Claude Code, OpenAI Codex CLI,
+Gemini CLI, and Cursor Agent all support it as clients (Aider and
+Crush don't). What's Claude-specific here is just the **auto-wiring**:
+the dashboard injects a per-agent `--mcp-config <path>` flag into
+the Claude launch line so the mailbox tools appear in `/mcp` without
+the user touching any config file.
+
+If you'd like the mailbox from another MCP-capable provider, add an
+entry pointing at `http://127.0.0.1:<port>/mcp?agent=<your-id>` to
+that CLI's MCP config file (`~/.codex/config.toml`,
+`~/.gemini/settings.json`, `~/.cursor/mcp.json`, …). Use any string
+as `<your-id>` — the dashboard treats it as the agent identity for
+the `read_messages` / `send_message` tool calls below.
+
+The dashboard's in-process MCP server (slug `agent-workspace`)
+exposes these tools to whichever agent connects:
 
 | Tool | What it does |
 |---|---|

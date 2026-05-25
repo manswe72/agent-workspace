@@ -4731,6 +4731,7 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                           "binary": p.binary,
                           "installed": p.is_installed(),
                           "supports_mcp": p.supports_mcp(),
+                          "auto_registers_mcp": p.auto_registers_mcp(),
                           "supports_hooks": p.supports_hooks()}
                         for p in _providers.all_providers()
                     ],
