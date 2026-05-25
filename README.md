@@ -1,3 +1,9 @@
+<p align="center">
+  <img src="docs/screenshots/dashboard.png"
+       alt="Agent Workspace dashboard — Agent Engineering tab with workspace stats, agent picker, and embedded terminal"
+       width="900">
+</p>
+
 # Agent Workspace · Status Board
 
 A local HTTP dashboard for `~/github/worktrees/<workspace>/<repo>` —
