@@ -6140,6 +6140,30 @@
       editBtn);
   }
 
+  // Render a PR's state as a colour-coded pill. GitHub's REST API
+  // reports "closed" for both merged and not — the dashboard
+  // disambiguates via mergedAt (set = merged, null = closed without
+  // merging). Open + draft retain their previous styling; merged
+  // gets a purple pill and closed-without-merging a grey one.
+  function prStatePill(it) {
+    const state = (it.state || '').toLowerCase();
+    let kind = state || 'open';
+    let label = state || 'open';
+    if (it.isDraft) {
+      kind = 'draft';
+      label = 'draft';
+    } else if (state === 'open') {
+      kind = 'open';
+    } else if (state === 'merged' || (state === 'closed' && it.mergedAt)) {
+      kind = 'merged';
+      label = 'merged';
+    } else if (state === 'closed') {
+      kind = 'closed';
+      label = 'closed';
+    }
+    return h('span', { class: `github-pill github-pill-${kind}` }, label);
+  }
+
   function renderGithubModal(issuesR, prsR, unassignedR) {
     const body = document.getElementById('github-body');
     if (!body) return;
@@ -6208,9 +6232,7 @@
             h('a', { href: it.url, target: '_blank',
                       rel: 'noopener noreferrer' }, '#' + it.number)),
           h('td', {}, it.title || ''),
-          h('td', {},
-            h('span', { class: `github-pill github-pill-${it.state || 'open'}${it.isDraft ? ' github-pill-draft' : ''}` },
-              it.state + (it.isDraft ? ' (draft)' : ''))),
+          h('td', {}, prStatePill(it)),
           h('td', {}, workspaceCell(existing)),
         ];
         if (!isPRTable) {
@@ -6254,6 +6276,7 @@
       issueTable(prs.map(pr => ({
         repo: pr.repo, number: pr.number, title: pr.title,
         state: pr.state, url: pr.url, isDraft: pr.isDraft,
+        mergedAt: pr.mergedAt, closedAt: pr.closedAt,
       })), 'github.empty-prs', { isPR: true }),
     );
     body.replaceChildren(...children);

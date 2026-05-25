@@ -123,15 +123,15 @@ def _whoami(token: str) -> str | None:
 def _gh_cli_list_prs(repo: str) -> list[dict] | None:
     if not shutil.which("gh"):
         return None
-    fields = "number,title,state,url,headRefName,isDraft,updatedAt,author"
+    # `gh pr list` defaults to --state=open. We pass --state=all so
+    # closed + merged PRs surface alongside open ones; the dashboard
+    # renders them with distinct pills and sorts open-first.
+    fields = ("number,title,state,url,headRefName,isDraft,updatedAt,"
+              "mergedAt,closedAt,author")
     try:
         r = subprocess.run(
-            # No author filter — list every open PR in the repo so the
-            # dashboard surface matches the "My GitHub issues" modal's
-            # broader scope. Users care about PRs they need to review
-            # or are watching, not just ones they opened themselves.
             ["gh", "pr", "list", "--repo", repo,
-             "--search", "is:open",
+             "--state", "all",
              "--json", fields, "--limit", "100"],
             capture_output=True, text=True, timeout=10, check=False,
         )
@@ -150,12 +150,15 @@ def _gh_cli_list_prs(repo: str) -> list[dict] | None:
 # ── REST PR list ────────────────────────────────────────────────────────
 
 def _rest_list_prs(repo: str) -> tuple[list[dict] | None, str | None]:
-    """Every open PR in the repo. Used to be filtered to author=me;
-    matches the "My GitHub issues" modal's broader view now (which
-    includes PRs you may want to review even if you didn't open them)."""
+    """Every PR in the repo, all states. Sorted by updatedAt desc
+    so the freshest activity (open AND recently-closed/merged) lands
+    at the top of the modal's PR section. Cap at 100 per repo —
+    enough for any sensibly-sized repo without flooding the modal."""
     token = _resolve_token()
     data, err = _request(
-        f"{_API_BASE}/repos/{repo}/pulls?state=open&per_page=100", token)
+        f"{_API_BASE}/repos/{repo}/pulls"
+        f"?state=all&sort=updated&direction=desc&per_page=100",
+        token)
     if data is None:
         return None, err
     if not isinstance(data, list):
@@ -163,6 +166,10 @@ def _rest_list_prs(repo: str) -> tuple[list[dict] | None, str | None]:
     out: list[dict] = []
     for pr in data:
         login = ((pr.get("user") or {}).get("login")) or ""
+        # Distinguish "merged" from "closed without merging" — the
+        # REST API exposes this via merged_at (null = closed, set
+        # = merged). The state pill in the UI uses this to render
+        # merged PRs differently (purple) from cancelled ones (grey).
         out.append({
             "repo": repo,
             "number": pr.get("number"),
@@ -172,6 +179,8 @@ def _rest_list_prs(repo: str) -> tuple[list[dict] | None, str | None]:
             "headRefName": ((pr.get("head") or {}).get("ref")) or "",
             "isDraft": bool(pr.get("draft")),
             "updatedAt": pr.get("updated_at") or "",
+            "mergedAt": pr.get("merged_at") or "",
+            "closedAt": pr.get("closed_at") or "",
             "author": {"login": login},
         })
     return out, None
@@ -197,7 +206,11 @@ def _fetch_repo_prs(repo: str, force: bool) -> tuple[list[dict], str | None]:
 
 
 def fetch_my_prs(force: bool = False) -> tuple[list[dict], str | None]:
-    """All open PRs you authored across every configured repo."""
+    """Every PR across the configured repos, all states. Sorted
+    open-first (still-actionable), then draft, then merged (recent
+    wins), then closed-without-merging. Within each bucket, freshest
+    updatedAt comes first. Capped at 50 total — the GitHub modal
+    isn't a PR archive, just a quick "what's relevant now?" view."""
     if not _REPOS:
         return [], "GitHub not configured"
     all_prs: list[dict] = []
@@ -207,7 +220,29 @@ def fetch_my_prs(force: bool = False) -> tuple[list[dict], str | None]:
         all_prs.extend(prs)
         if err:
             errs.append(f"{repo}: {err}")
-    return all_prs, ("; ".join(errs) if errs else None)
+
+    # state buckets: 0 = open (non-draft), 1 = draft, 2 = merged,
+    # 3 = closed-without-merging. Tie-break by updatedAt desc.
+    def _bucket(pr: dict) -> int:
+        state = (pr.get("state") or "").lower()
+        if state == "open":
+            return 1 if pr.get("isDraft") else 0
+        # gh CLI emits "MERGED"/"CLOSED" uppercase, REST emits "closed"
+        # for both merged and not — disambiguate via mergedAt.
+        if state == "merged" or pr.get("mergedAt"):
+            return 2
+        return 3
+
+    all_prs.sort(
+        key=lambda pr: (_bucket(pr), pr.get("updatedAt") or ""),
+        reverse=False,
+    )
+    # The bucket key sorts ascending (open=0 first), but updatedAt
+    # should be desc inside each bucket. Easiest fix: stable sort
+    # by updatedAt desc FIRST, then by bucket asc.
+    all_prs.sort(key=lambda pr: pr.get("updatedAt") or "", reverse=True)
+    all_prs.sort(key=lambda pr: _bucket(pr))
+    return all_prs[:50], ("; ".join(errs) if errs else None)
 
 
 def pr_for_workspace(workspace: str) -> dict | None:
