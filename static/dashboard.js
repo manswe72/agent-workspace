@@ -612,8 +612,6 @@
       'agent.controls.disconnect-tip': 'Close the WebSocket and leave the agent process running on the server. Reconnect from any tab.',
       'agent.controls.reconnect': '↻ Reconnect',
       'agent.controls.reconnect-tip': 'Reattach to the running agent process on the server.',
-      'agent.controls.external': '↗ External',
-      'agent.controls.external-tip': 'Open this agent in an external terminal window instead of inline',
       'agent.controls.info':    'Info',
       'agent.controls.info-tip': 'Open the Agent information pane (Activity + Messages) in a modal',
       'agent.controls.fullscreen': '⤢ Fullscreen',
@@ -1180,8 +1178,6 @@
       'agent.controls.disconnect-tip': 'Stäng WebSocket och låt agentprocessen fortsätta köra på servern. Återanslut från valfri flik.',
       'agent.controls.reconnect': '↻ Återanslut',
       'agent.controls.reconnect-tip': 'Återanslut till den körande agentprocessen på servern.',
-      'agent.controls.external': '↗ Externt',
-      'agent.controls.external-tip': 'Öppna denna agent i ett externt terminalfönster istället för inline',
       'agent.controls.info':    'Info',
       'agent.controls.info-tip': 'Öppna Agentinformation (Aktivitet + Meddelanden) i en dialog',
       'agent.controls.fullscreen': '⤢ Helskärm',
@@ -10268,12 +10264,6 @@
     // head's [Notes][+] pair gets covered by the position:fixed wrap,
     // so we surface a fullscreen-only copy of the Notes controls in
     // its slot (see agent-notes-btn-group below).
-    const externalBtn = isGeneral ? null : h('button', {
-      class: 'btn agent-external-btn',
-      type: 'button',
-      title: t('agent.controls.external-tip'),
-      onclick: () => openExternalConsole(issue),
-    }, t('agent.controls.external'));
 
     // Fullscreen-only mirror of the issue-head Notes controls. CSS
     // keeps this hidden in normal mode (where the head row is visible
@@ -10389,10 +10379,9 @@
       statusLine,
       lifecycleBtn,
       discoBtn,
-      // External is shown in normal mode; the Notes pair takes its
-      // place in fullscreen. CSS in dashboard.css picks which one is
-      // visible based on .agent-fullscreen on an ancestor.
-      externalBtn,
+      // Notes pair is fullscreen-only — the issue-head's [Notes][+]
+      // is covered by the position:fixed wrap in fullscreen, so we
+      // surface it here. CSS hides it outside fullscreen.
       notesFsBtnGroup,
       openInEditorBtn,
       infoBtn,
@@ -13062,16 +13051,6 @@
       ? t('tab.generic-agent') : issue;
     showToast('ok', t('toast.agent.stopped', { issue: displayIssue }));
     ensureAgentPanelHydrated(issue);
-  }
-
-  function openExternalConsole(issue) {
-    // Reuses the existing /api/open-agent-tab handler the 💻 button
-    // already uses — same model selection rules, same env contract.
-    fetch('/api/open-agent-tab', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ issue }),
-    }).catch(() => {});
   }
 
   const slugId = (s) => s.replace(/[^a-zA-Z0-9_-]/g, '-');

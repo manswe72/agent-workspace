@@ -653,7 +653,6 @@ body { display: flex; flex-direction: column; min-height: 100vh; }
    since the fullscreen toolbar is already tight. */
 .agent-notes-btn-group { display: none; }
 .agent-fullscreen .agent-notes-btn-group { display: inline-flex; }
-.agent-fullscreen .agent-external-btn { display: none; }
 /* Status indicator — icon-only (🟢 / ⚫) in the row; the title=
    tooltip exposes the full "running · pid X · {age} ago" text on
    hover. Compact width keeps the controls row short. */
