@@ -21,8 +21,11 @@
 #   ./bin/release.sh --dry-run                    # print what would happen, do nothing
 #
 # Required: git, gh (https://cli.github.com/), GitHub auth via
-# `gh auth login` or `GH_TOKEN=$(cat ~/.config/agent-workspace/github-token) \
-#   gh auth login --with-token`.
+# `gh auth login`, or feed the dashboard's PAT on stdin:
+#   gh auth login --with-token < ~/.config/agent-workspace/github-token
+# Or skip `gh auth login` entirely and just export GH_TOKEN — gh picks
+# it up automatically:
+#   export GH_TOKEN=$(cat ~/.config/agent-workspace/github-token)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."          # repo root
@@ -80,8 +83,8 @@ command -v gh  >/dev/null 2>&1 || {
 if ! gh auth status >/dev/null 2>&1; then
   err "gh is not authenticated — run one of:"
   echo "    gh auth login"
-  echo "    GH_TOKEN=\$(cat ~/.config/agent-workspace/github-token) \\"
-  echo "      gh auth login --with-token"
+  echo "    gh auth login --with-token < ~/.config/agent-workspace/github-token"
+  echo "    export GH_TOKEN=\$(cat ~/.config/agent-workspace/github-token)"
   exit 1
 fi
 
