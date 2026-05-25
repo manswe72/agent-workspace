@@ -152,12 +152,33 @@ def pull_latest(repo_dir: Path) -> dict:
     if not (repo_dir / ".git").exists():
         out["error"] = "not a git repository"
         return out
+    # Resolve the pull target explicitly. Plain `git pull` relies on
+    # upstream tracking (`[branch "main"] remote = origin`) which
+    # git-filter-repo strips and which fresh clones occasionally
+    # forget; the user would then see git's verbose
+    # "no tracking information for the current branch" prose
+    # instead of an actionable error. Falling back to
+    # `git pull --ff-only origin <branch>` makes the operation
+    # robust regardless of tracking config.
+    rc_br, br_out, _ = _git(repo_dir, "rev-parse", "--abbrev-ref", "HEAD")
+    branch = (br_out.strip() if rc_br == 0 else "")
+    if not branch or branch == "HEAD":
+        out["error"] = ("not on a branch — checkout main first "
+                          "(detached HEAD or rebase in progress?)")
+        return out
     # Stash any local changes so they don't block the ff-only merge.
     rc_st, st_out, _ = _git(repo_dir, "stash", "push",
                              "-m", "auto-stash before dashboard update")
     stashed = rc_st == 0 and "No local changes to save" not in st_out
-    # Pull.
-    rc, stdout, stderr = _git(repo_dir, "pull", "--ff-only", timeout=60.0)
+    # Pull, explicit remote + branch so missing upstream config
+    # doesn't sink us. Also opportunistically re-attach the
+    # upstream so subsequent operations from the CLI (e.g. `git
+    # pull` from a terminal) work without arguments too.
+    rc, stdout, stderr = _git(
+        repo_dir, "pull", "--ff-only", "origin", branch, timeout=60.0)
+    if rc == 0:
+        _git(repo_dir, "branch",
+              f"--set-upstream-to=origin/{branch}", branch)
     out["stdout"] = stdout.strip()
     if rc != 0:
         if stashed:
