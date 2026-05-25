@@ -362,11 +362,40 @@ the `?agent=<id>` query (Claude Code) or the `X-Agent-Id` header
 
 | Tool | What it does |
 |---|---|
-| `send_message(to, text, in_reply_to?)` | Send to another agent. Recipient is a workspace id, a display name (set in the GitHub modal's ✏ rename), or `__agent__` / `Agent 007`. |
-| `read_messages(unread_only?, limit?)` | Fetch this agent's inbox; marks rows read. |
-| `request_review(target, ref, context?)` | Structured `review_request` with a git sha / branch / path. |
-| `list_agents(live_only?)` | Returns every agent id + display name + state. |
-| `broadcast_message(text)` | Fan one message out to every live workspace agent (General Agent + caller excluded). |
+| `send_message(to, text, in_reply_to?)` | Send a message to another agent. Recipient is a workspace id (`1-fix-auth`), a display name (set in the GitHub modal's ✏ rename, e.g. `Alice`), or `__agent__` (`Agent 007`). |
+| `read_messages(unread_only?, limit?)` | Fetch this agent's inbox. Marks each row read. |
+| `request_review(target, ref, context?)` | Convenience wrapper that drops a structured `review_request` (with a git sha / branch / path in `ref`) into the target's mailbox. |
+| `list_agents(live_only?)` | Returns every agent id + display name + state. Use before `send_message` to pick a recipient that's actually online. |
+| `broadcast_message(text)` | Fan one message out to every live workspace agent (the General Agent + the caller are excluded). |
+
+How agents pick up new mail:
+
+1. **Auto-poll** — when **Profile → Dashboard → Agents → Mailbox
+   auto-poll** is on (default ON), the dashboard scans live pty
+   sessions every 20 s. If an attached agent has unread mail AND the
+   user has been idle in its terminal for ≥15 s, the dashboard types
+   a bracketed-paste nudge prompt + Enter so the TUI auto-submits.
+   Per-agent throttle (≥60 s between nudges).
+2. **Tab badge** — a `📬N` chip on the General Agent tab and on each
+   workspace tab counts unread mail.
+
+Per-provider extras layer on top — see each provider's doc for the
+extras (e.g. Claude Code's `UserPromptSubmit` hook that prepends the
+unread-mail summary to the next turn).
+
+How you see threads in the dashboard:
+
+- The Messages pane has three views — **Thread** (the default —
+  threaded by `in_reply_to`, newest conversation first, replies
+  indented under their parent), **Received**, and **Sent**.
+- Each conversation root gets a **+N / −N** chip that folds the
+  subtree inline.
+- Each row carries ✕ (delete) and ↩ (reply). Delete-conversation
+  removes the whole subtree in one transaction.
+
+Toggle the whole feature off from **Profile → Dashboard → Agents →
+Agent-to-agent messaging**. When off, new agents launch with no
+MCP wiring and the `📬` badge is hidden.
 
 State lives in the dashboard's SQLite `agent_messages` table and
 never leaves this machine.

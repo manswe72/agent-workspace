@@ -57,54 +57,28 @@ under the Claude Code provider.
 
 ## MCP — agent-to-agent messaging
 
-The dashboard's in-process MCP server (slug `agent-workspace`) is
-auto-injected into every Claude session via `--mcp-config <path>` +
-`--allowedTools mcp__agent-workspace`. Agents can send messages to
-each other, request reviews, list peers, and broadcast.
+The generic five-tool message API, the dashboard auto-poll, the tab
+badge, the threads UI, and the toggle-off switch are documented in
+the top-level [README's MCP section](../../README.md#mcp--agent-to-agent-messaging).
+The two Claude-specific bits:
 
-Tools exposed (also available to other MCP-capable providers — see
-their docs):
+- **Auto-injection.** Every Claude session launches with
+  `--mcp-config <path>` + `--allowedTools mcp__agent-workspace`,
+  so the dashboard's in-process MCP server is wired in without the
+  user touching `~/.claude/`. Identity flows through the
+  `?agent=<id>` query on the MCP URL.
+- **`UserPromptSubmit` mail injection.** The hook
+  `bin/agent-mailbox-inject` fires on every human prompt and
+  prepends `📬 You have N unread message(s)…` to the next turn's
+  context, so the agent reacts on its own without you having to ask.
+  Wired by `./setup.sh --enable-claude-hooks` alongside
+  `agent-event-notify`. No other provider has a comparable hook
+  surface, so this auto-reaction is Claude-only — the other
+  providers rely on the dashboard auto-poll and the tab badge.
 
-| Tool | What it does |
-|---|---|
-| `send_message(to, text, in_reply_to?)` | Send a message to another agent. Recipient is the workspace id (`1-fix-auth`), a display name (`Alice`), or `__agent__` (`Agent 007`). |
-| `read_messages(unread_only?, limit?)` | Fetch this agent's inbox. Marks each row read. |
-| `request_review(target, ref, context?)` | Convenience wrapper that drops a structured `review_request` (with a git sha / branch / path in `ref`) into the target's mailbox. |
-| `list_agents(live_only?)` | Returns every agent id + display name + state. Use before `send_message` to pick a recipient that's actually online. |
-| `broadcast_message(text)` | Fan one message out to every live workspace agent (the General Agent + the caller are excluded). |
-
-How a Claude session picks up new mail:
-
-1. **`UserPromptSubmit` hook** (`bin/agent-mailbox-inject`) fires on
-   every human prompt and prepends `📬 You have N unread message(s)…`
-   to the next turn's context, so the agent reacts on its own
-   without you having to ask. Wired by
-   `./setup.sh --enable-claude-hooks` alongside `agent-event-notify`.
-2. **Auto-poll** — when **Profile → Dashboard → Agents → Mailbox
-   auto-poll** is on (default ON), the dashboard scans live pty
-   sessions every 20 s. If an attached agent has unread mail AND the
-   user has been idle in its terminal for ≥15 s, the dashboard types
-   a bracketed-paste nudge prompt + Enter so Claude's TUI
-   auto-submits. Per-agent throttle (≥60 s between nudges).
-3. **Tab badge** — a `📬N` chip on the General Agent tab and on each
-   workspace tab counts unread mail.
-
-How you see threads in the dashboard:
-
-- The Messages pane has three views — **Thread** (the default —
-  threaded by `in_reply_to`, newest conversation first, replies
-  indented under their parent), **Received**, and **Sent**.
-- Each conversation root gets a **+N / −N** chip that folds the
-  subtree inline.
-- Each row carries ✕ (delete) and ↩ (reply). Delete-conversation
-  removes the whole subtree in one transaction.
-
-Toggle the whole feature off from **Profile → Dashboard → Agents →
-Agent-to-agent messaging**. When off, new agents launch with no
-`--mcp-config`, no `--allowedTools` rule, and the `📬` badge is hidden.
-
-State lives in the SQLite `agent_messages` table; messages are local
-to one dashboard instance and are not synced across machines.
+When agent-to-agent messaging is toggled off in
+**Profile → Dashboard → Agents**, new Claude sessions launch with no
+`--mcp-config` and no `--allowedTools` rule.
 
 ## Model picker
 
