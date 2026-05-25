@@ -86,7 +86,12 @@ EXCLUDES=(
 EXCLUDES+=(--exclude='bin/build-release-tarball.sh')
 
 echo "→ building ${OUT_TGZ}"
-tar --transform "s,^,${PREFIX}/," "${EXCLUDES[@]}" \
+# `flags=r` confines the transform to regular-file names. Without
+# it, GNU tar rewrites symlink TARGETS too — so
+# bin/agent-workspace-restart → agent-worktrees-restart turns into
+# bin/agent-workspace-restart → agent-workspace-<VERSION>/agent-worktrees-restart
+# which is a bad relative path and breaks the install.
+tar --transform "flags=r;s,^,${PREFIX}/," "${EXCLUDES[@]}" \
     -czf "${OUT_TGZ}" "${FILES[@]}"
 echo "  $(du -h "${OUT_TGZ}" | cut -f1)  ${OUT_TGZ}"
 
