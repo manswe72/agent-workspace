@@ -59,6 +59,7 @@ FILES=(
   install.sh
   VERSION
   README.md
+  INSTALL.md
   AGENTS.md
   LICENSE
 )
