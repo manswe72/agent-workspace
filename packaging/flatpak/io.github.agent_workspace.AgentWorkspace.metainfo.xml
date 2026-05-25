@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.agent_workspace.AgentWorkspace</id>
+  <name>Agent Workspace</name>
+  <summary>Local dashboard for coding-agent CLI worktrees</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <description>
+    <p>
+      Agent Workspace is a small local HTTP dashboard that watches
+      every directory under ~/git/worktrees/&lt;workspace&gt;/&lt;repo&gt;,
+      surfaces a GitHub-style activity heatmap of your commits, and
+      lets you launch a coding-agent CLI in a terminal tab — Claude
+      Code, OpenAI Codex CLI, Aider, Gemini CLI, Cursor Agent, or
+      Crush. It tracks token usage and session liveness per workspace,
+      and never runs git mutations behind your back.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Pluggable agent CLI providers (six supported out of the box).</li>
+      <li>Activity heatmap of your commits over the last 365 days.</li>
+      <li>Per-workspace agent terminal embedded in the dashboard.</li>
+      <li>Time tracking with weekly summaries.</li>
+      <li>Cross-agent messaging via MCP (Claude Code provider).</li>
+      <li>Opt-in cross-machine state sync via a user-supplied git repo.</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">io.github.agent_workspace.AgentWorkspace.desktop</launchable>
+
+  <url type="homepage">https://github.com/agent-workspace/agent-workspace</url>
+  <url type="bugtracker">https://github.com/agent-workspace/agent-workspace/issues</url>
+
+  <developer id="io.github.agent_workspace">
+    <name>agent-workspace contributors</name>
+  </developer>
+
+  <content_rating type="oars-1.1" />
+
+  <categories>
+    <category>Development</category>
+  </categories>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>The Agent Workspace dashboard with the activity heatmap and per-workspace tabs.</caption>
+      <image>https://github.com/agent-workspace/agent-workspace/raw/main/docs/screenshot-dashboard.png</image>
+    </screenshot>
+  </screenshots>
+
+  <releases>
+    <release version="0.1.0" date="2026-05-25">
+      <description>
+        <p>Initial release with multi-agent provider support and Flatpak/Snap packaging.</p>
+      </description>
+    </release>
+  </releases>
+</component>

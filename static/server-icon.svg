@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Three stacked rack units with status LEDs — clearly "server" so the
+       launcher is visually distinct from the dashboard's git-branch favicon. -->
+  <g fill="#0969da">
+    <rect x="5"  y="5"  width="22" height="6" rx="1.5"/>
+    <rect x="5"  y="13" width="22" height="6" rx="1.5"/>
+    <rect x="5"  y="21" width="22" height="6" rx="1.5"/>
+  </g>
+  <g fill="#3fb950">
+    <circle cx="23" cy="8"  r="1.3"/>
+    <circle cx="23" cy="16" r="1.3"/>
+    <circle cx="23" cy="24" r="1.3"/>
+  </g>
+  <g fill="#0d1117" opacity="0.4">
+    <rect x="8" y="7.2" width="9" height="1.6" rx="0.5"/>
+    <rect x="8" y="15.2" width="9" height="1.6" rx="0.5"/>
+    <rect x="8" y="23.2" width="9" height="1.6" rx="0.5"/>
+  </g>
+</svg>

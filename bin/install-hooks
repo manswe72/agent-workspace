@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# install-hooks — install the local pre-push git hook for agent-workspace.
+#
+# Idempotent: re-running just overwrites the hook with the latest copy.
+# Run from anywhere; finds its own repo root via $0.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+HOOKS_DIR="${REPO_DIR}/.git/hooks"
+
+if [ ! -d "${HOOKS_DIR}" ]; then
+  echo "no .git/hooks at ${HOOKS_DIR}" >&2
+  exit 1
+fi
+
+cat > "${HOOKS_DIR}/pre-push" <<'EOF'
+#!/usr/bin/env bash
+# pre-push — run pytest + ruff before pushing. Aborts the push on any
+# failure. Bypass with `git push --no-verify` if you really mean to
+# (e.g. shipping a hotfix while a known-broken test is being fixed).
+#
+# Installed by bin/install-hooks. Re-run that script any time the
+# checks change.
+
+set -e
+
+# Run from the repo root so relative paths in pytest / ruff configs resolve.
+cd "$(git rev-parse --show-toplevel)"
+
+echo "→ ruff check"
+# Prefer the standalone `ruff` binary (installed via pipx or
+# downloaded directly into ~/.local/bin). Fall back to
+# `python3 -m ruff` only when the binary isn't on PATH —
+# Ubuntu/Debian's `python3-ruff` package historically shipped a
+# stale 0.0.291 that can't parse modern `[tool.ruff.lint]`
+# pyproject.toml config sections.
+if command -v ruff >/dev/null 2>&1 ; then
+  if ! ruff check . ; then
+    echo "✗ ruff failed — fix or bypass with: git push --no-verify" >&2
+    exit 1
+  fi
+else
+  if ! python3 -m ruff check . ; then
+    echo "✗ ruff failed — fix or bypass with: git push --no-verify" >&2
+    exit 1
+  fi
+fi
+
+echo "→ pytest"
+if ! python3 -m pytest -q ; then
+  echo "✗ pytest failed — fix or bypass with: git push --no-verify" >&2
+  exit 1
+fi
+
+echo "✓ pre-push checks passed"
+EOF
+
+chmod +x "${HOOKS_DIR}/pre-push"
+echo "✓ installed ${HOOKS_DIR}/pre-push"

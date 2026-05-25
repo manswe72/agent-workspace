@@ -1,0 +1,10 @@
+# bash completion for claude-workspace-sync
+_claude_workspace_sync() {
+  local cur
+  COMPREPLY=()
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  if [[ "$cur" == -* ]]; then
+    COMPREPLY=( $(compgen -W "--quiet" -- "$cur") )
+  fi
+}
+complete -F _claude_workspace_sync claude-workspace-sync

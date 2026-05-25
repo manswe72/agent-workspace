@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# agent-workspace-launch — start the dashboard server.
+#
+# Used by the freedesktop launcher entry installed under
+# ~/.local/share/applications/agent-workspace.desktop. This script
+# only starts the server — it does NOT open a browser. Open the
+# dashboard with the installed PWA (or your bookmark) once the server
+# is up. If the server is already running, the script exits silently
+# (with a notification so the user knows nothing went wrong).
+
+PORT="${AGENT_WORKSPACE_PORT:-8765}"
+
+# Match agent_workspace.py's _default_cache_dir().
+case "$(uname -s)" in
+  Darwin)              CACHE_DIR="$HOME/Library/Caches/agent-workspace" ;;
+  MINGW*|MSYS*|CYGWIN*) CACHE_DIR="${LOCALAPPDATA:-$HOME/AppData/Local}/agent-workspace" ;;
+  *)                   CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/agent-workspace" ;;
+esac
+PIDFILE="$CACHE_DIR/server.${PORT}.pid"
+
+# Icon for desktop notifications — falls back to a name if the file
+# isn't accessible (e.g. on minimal installs).
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P -- "$(dirname -- "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+REPO_DIR="$(cd -P -- "$(dirname -- "$SOURCE")/.." && pwd)"
+ICON="$REPO_DIR/static/server-icon.svg"
+# Absolute path to the server wrapper — the desktop session's PATH
+# usually doesn't include ~/.local/bin, so don't rely on PATH lookup.
+SERVER_BIN="$REPO_DIR/bin/agent-worktrees-server"
+
+notify() {
+  # $1 = summary, $2 = body. Silent if notify-send is unavailable.
+  command -v notify-send >/dev/null 2>&1 || return 0
+  notify-send -i "$ICON" -a "Agentic Engineering Workspace" \
+              "$1" "$2" >/dev/null 2>&1 || true
+}
+
+server_running() {
+  [[ -f "$PIDFILE" ]] || return 1
+  local pid
+  pid="$(cat "$PIDFILE" 2>/dev/null)" || return 1
+  [[ -n "$pid" ]] || return 1
+  kill -0 "$pid" 2>/dev/null
+}
+
+if server_running; then
+  notify "Server already running" "http://127.0.0.1:${PORT}/"
+  exit 0
+fi
+
+# Spawn the server fully detached so closing the launcher process
+# (or its parent gnome-shell) doesn't take the server with it.
+SPAWN_LOG="$CACHE_DIR/launcher.${PORT}.log"
+mkdir -p "$CACHE_DIR"
+if command -v setsid >/dev/null 2>&1; then
+  setsid -f "$SERVER_BIN" --no-open --port "$PORT" \
+      >>"$SPAWN_LOG" 2>&1 < /dev/null || \
+  setsid "$SERVER_BIN" --no-open --port "$PORT" \
+      >>"$SPAWN_LOG" 2>&1 < /dev/null &
+else
+  nohup "$SERVER_BIN" --no-open --port "$PORT" \
+      >>"$SPAWN_LOG" 2>&1 < /dev/null &
+fi
+disown 2>/dev/null || true
+
+# Wait briefly for the server to come up before notifying.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  sleep 0.3
+  server_running && break
+done
+
+if server_running; then
+  notify "Server started" "http://127.0.0.1:${PORT}/"
+else
+  notify "Server failed to start" "Check ~/.cache/agent-workspace/ logs."
+  exit 1
+fi

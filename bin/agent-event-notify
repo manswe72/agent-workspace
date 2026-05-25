@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+"""
+agent-event-notify — Claude Code hook → agent-workspace dashboard.
+
+Runs as a hook command from ~/.claude/settings.json. Reads the hook
+event JSON from stdin, derives the issue from the cwd (worktrees layout
+~/git/worktrees/<issue>/<repo>), and POSTs a normalised event to
+http://127.0.0.1:8765/api/events. Fires a desktop notification via
+`notify-send` only for the Notification hook — that's the one Claude
+Code fires when it actually wants user input.
+
+The hook never blocks Claude on failure — every network call is
+wrapped + silenced, every notify-send call is best-effort.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+
+PORT = int(os.environ.get("AGENT_WORKSPACE_PORT", "8765"))
+TIMEOUT = 1.5
+
+
+def derive_issue(cwd: str) -> str:
+    """Extract the <issue> from a path like '~/git/worktrees/<issue>/<repo>'.
+    Accepts both POSIX ('/') and Windows ('\\') separators so the hook
+    works regardless of which OS Claude Code is running on."""
+    m = re.search(r"[/\\]worktrees[/\\]([^/\\]+)", cwd)
+    return m.group(1) if m else ""
+
+
+def post_event(payload: dict) -> None:
+    body = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{PORT}/api/events",
+        data=body, method="POST",
+        headers={"Content-Type": "application/json",
+                 "User-Agent": "agent-event-notify/1.0"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            resp.read()
+    except (urllib.error.URLError, OSError, TimeoutError):
+        pass  # silent — hook must never block Claude
+
+
+def desktop_notify(title: str, body: str) -> None:
+    """Pop a native desktop notification. Best-effort: a missing tool /
+    timeout / any other failure is swallowed so the hook never blocks
+    Claude."""
+    if sys.platform == "darwin":
+        # macOS Notification Center via AppleScript. osascript ships
+        # with the OS so no install is required. Backslashes + quotes
+        # inside the strings need escaping for the AppleScript literal.
+        def _esc(s: str) -> str:
+            return s.replace("\\", "\\\\").replace('"', '\\"')
+        script = (
+            f'display notification "{_esc(body)}" '
+            f'with title "{_esc(title)}"'
+        )
+        try:
+            subprocess.run(["osascript", "-e", script],
+                            check=False, timeout=2)
+        except (FileNotFoundError, subprocess.SubprocessError):
+            pass
+        return
+    if sys.platform == "win32":
+        # Windows toast via BurntToast (PowerShell module). The user
+        # installs it once: `Install-Module -Name BurntToast`. If the
+        # module isn't installed the cmdlet errors silently because
+        # of `-ErrorAction SilentlyContinue` and the hook still
+        # succeeds — same fail-open posture as missing notify-send
+        # on Linux. PowerShell single-quoted strings only need
+        # single-quote doubling to escape.
+        def _ps(s: str) -> str:
+            return s.replace("'", "''")
+        script = (
+            "Import-Module BurntToast -ErrorAction SilentlyContinue; "
+            f"New-BurntToastNotification -Text '{_ps(title)}','{_ps(body)}'"
+        )
+        try:
+            subprocess.run(
+                ["powershell", "-NoProfile", "-WindowStyle", "Hidden",
+                 "-Command", script],
+                check=False, timeout=4,
+            )
+        except (FileNotFoundError, subprocess.SubprocessError):
+            pass
+        return
+    # Linux / other — notify-send is the de-facto desktop popup.
+    try:
+        subprocess.run(
+            ["notify-send", "-t", "5000", "-a", "agent-workspace",
+             title, body],
+            check=False, timeout=2,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        pass
+
+
+def main() -> int:
+    raw = sys.stdin.read() if not sys.stdin.isatty() else ""
+    try:
+        data = json.loads(raw) if raw else {}
+    except (ValueError, TypeError):
+        data = {}
+
+    cwd = os.getcwd()
+    issue = derive_issue(cwd)
+    kind = data.get("hook_event_name") or "Unknown"
+
+    # Pull a useful one-liner out of the event payload. Different hooks
+    # carry different fields (Notification has `message`, UserPromptSubmit
+    # has `prompt`, Stop has none) — fall back through them.
+    msg = (data.get("message")
+           or data.get("prompt", "")[:200]
+           or data.get("reason")
+           or "")
+
+    post_event({
+        "kind": kind,
+        "issue": issue,
+        "session_id": data.get("session_id") or "",
+        "message": msg,
+        "cwd": cwd,
+    })
+
+    # Surface user-attention events on the desktop too. Only the
+    # Notification hook qualifies — that's the one Claude Code fires
+    # when it actually wants the user's input. Stop fires after every
+    # turn, which is too noisy to deserve a desktop pop-up.
+    #
+    # Skip the desktop popup when the agent was launched from a
+    # agent-workspace terminal tab (AGENT_WORKSPACE_LAUNCHED=1 is
+    # exported by bin/agent-worktrees). The dashboard already surfaces
+    # the event, so notify-send would just double-notify.
+    if kind == "Notification" and not os.environ.get("AGENT_WORKSPACE_LAUNCHED"):
+        desktop_notify(f"Claude · {issue or 'session'}",
+                       msg or "Awaiting input")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

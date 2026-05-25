@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# agent-workspace-sync — manually run one auto-sync tick:
+#   1. export SQLite cache → data/commits.jsonl + data/worktrees.json
+#   2. git add + commit if data/ changed
+#   3. git push (best-effort; log on failure)
+#   4. git fetch + pull --ff-only if origin advanced; re-import if so
+#
+# Useful when the server isn't running — for example, before going to a
+# different machine. The running server does the same loop every
+# --sync-interval seconds (default 5 min).
+#
+# Usage:
+#   agent-workspace-sync           # one tick + report
+#   agent-workspace-sync --quiet   # only print on changes / errors
+
+# Resolve through symlinks (this script is typically symlinked into
+# ~/.local/bin) so REPO_DIR points at the actual checkout.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P -- "$(dirname -- "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P -- "$(dirname -- "$SOURCE")" && pwd)"
+REPO_DIR="$(dirname "$SCRIPT_DIR")"
+
+QUIET=0
+[ "${1:-}" = "--quiet" ] && QUIET=1
+
+python3 - <<EOF
+import json, sys
+sys.path.insert(0, "$REPO_DIR")
+from agent_workspace import auto_sync_tick
+result = auto_sync_tick()
+quiet = $QUIET
+changed = any(result[k] for k in ("committed", "pushed", "pulled"))
+if quiet and not changed and not result["errors"]:
+    sys.exit(0)
+print(json.dumps(result, indent=2))
+sys.exit(1 if result["errors"] and not changed else 0)
+EOF

@@ -1,0 +1,344 @@
+#!/usr/bin/env python3
+"""agent-worktrees — open one terminal tab per ~/git/worktrees/<issue>,
+resuming the most recent Claude session in each.
+
+Usage:
+  agent-worktrees                     auto-detect terminal
+  agent-worktrees --terminal=gnome    gnome-terminal (Linux)
+  agent-worktrees --terminal=ghostty  ghostty (cross-platform)
+  agent-worktrees --terminal=terminal Terminal.app (macOS)
+  agent-worktrees --terminal=wt       Windows Terminal (Windows)
+  agent-worktrees --issue=BSS-1234    open just that issue's tab
+  agent-worktrees -h | --help         show this help
+
+Auto-detect order:
+  gnome-terminal > ghostty > Windows Terminal (Windows) > Terminal.app (macOS).
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+HOME = Path(os.path.expanduser("~"))
+DEFAULT_WORKTREES = HOME / "git" / "worktrees"
+PREFERRED_REPOS = ("core", "bssweb", "doc")
+DASHBOARD_PORT = int(os.environ.get("AGENT_WORKSPACE_PORT", "8765"))
+
+# Instruction appended to claude's --append-system-prompt in every tab so
+# the always-load skills from CLAUDE.md fire before the user's first prompt.
+PRELOAD_PROMPT = (
+    "On session start, before responding to anything else, scan every "
+    "CLAUDE.md in scope (current dir and parents) and invoke the Skill "
+    "tool once for each skill listed under any heading like \"Always "
+    "load\", \"MUST be loaded at the start\", \"every conversation\", "
+    "or equivalent. Do it proactively, without waiting for a user prompt. "
+    "If a skill is already loaded in the current session context, skip it."
+)
+
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        prog="agent-worktrees",
+        description="Open one terminal tab per ~/git/worktrees/<issue>, "
+                    "with `claude --continue` running in each.",
+    )
+    p.add_argument("--terminal", default="auto",
+                   choices=("auto", "gnome", "ghostty"),
+                   help="terminal emulator (default: auto)")
+    p.add_argument("--issue", default="",
+                   help="restrict to a single issue (e.g. BSS-1234)")
+    p.add_argument("--worktrees", default=str(DEFAULT_WORKTREES),
+                   help=f"worktrees root (default: {DEFAULT_WORKTREES})")
+    p.add_argument("--model", default="",
+                   help="Claude model alias/ID passed as `claude --model <X>` "
+                        "(e.g. 'opus', 'sonnet', 'haiku', or a full ID). "
+                        "Empty = let claude pick its default.")
+    return p.parse_args()
+
+
+def detect_terminal(want: str) -> str:
+    if want != "auto":
+        return want
+    if shutil.which("gnome-terminal"):
+        return "gnome"
+    if shutil.which("ghostty"):
+        return "ghostty"
+    # Windows: prefer Windows Terminal (`wt.exe`) when installed —
+    # ships with Windows 11 by default and is a free Store app on
+    # Windows 10. We don't fall back to plain cmd.exe because the
+    # console UX is markedly worse and most Windows users have wt.
+    if sys.platform == "win32" and (
+            shutil.which("wt") or shutil.which("wt.exe")):
+        return "wt"
+    # macOS: Terminal.app is always installed; check it last so users
+    # who prefer ghostty (also available on macOS) still get it.
+    if sys.platform == "darwin":
+        return "terminal"
+    sys.stderr.write(
+        "no supported terminal found (gnome-terminal, ghostty, "
+        "Windows Terminal on Windows, or Terminal.app on macOS)\n")
+    sys.exit(1)
+
+
+def collect_issues(worktrees_root: Path,
+                    only_issue: str) -> list[tuple[str, Path]]:
+    """Return a list of (issue, working_dir) pairs.
+
+    For each child of `worktrees_root` we pick the first existing
+    subdir from PREFERRED_REPOS (core > bssweb > doc) — that's the
+    place we want `claude --continue` to launch.
+    """
+    if not worktrees_root.is_dir():
+        sys.stderr.write(f"{worktrees_root} not found\n")
+        sys.exit(1)
+
+    pairs: list[tuple[str, Path]] = []
+    for d in sorted(p for p in worktrees_root.iterdir() if p.is_dir()):
+        issue = d.name
+        if only_issue and issue != only_issue:
+            continue
+        picked: Path | None = None
+        for sub in PREFERRED_REPOS:
+            cand = d / sub
+            if cand.is_dir():
+                picked = cand
+                break
+        if picked is None:
+            sys.stderr.write(
+                f"skipping {issue} — no core/bssweb/doc subdir\n")
+            continue
+        pairs.append((issue, picked))
+    return pairs
+
+
+def build_context(issue: str, working_dir: Path) -> str:
+    """The per-tab system prompt block describing where we are."""
+    branch = ""
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(working_dir), "rev-parse",
+             "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, check=False, timeout=2)
+        branch = (r.stdout or "").strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+    parts = ["You are working in the agent-workspace dashboard.",
+             "Active context for this session:",
+             f"- Workspace: {issue}",
+             f"- Worktree path: {working_dir}"]
+    if branch:
+        parts.append(f"- Branch: {branch}")
+    parts.append(
+        "Treat the worktree path as your working directory; "
+        "do not assume any other repo location.")
+    return "\n".join(parts) + "\n"
+
+
+def build_tab_title(issue: str) -> str:
+    return issue
+
+
+# Body of the bash -c that each new tab runs. Uses positional args so
+# values are passed safely:
+#   $1 = working directory
+#   $2 = claude session --name (full tab title; claude's OSC title-update
+#        keeps issue+summary visible, not just the bare issue id)
+#   $3 = system prompt (context + preload directive)
+#   $4 = tab title (re-asserted via OSC after claude exits, before bash
+#        takes over, so the tab keeps its full label)
+#   $5 = claude --model value (alias or full ID). Empty string skips
+#        --model entirely so the user's claude default applies.
+#
+# MODEL is left unquoted in the claude invocation so an empty $5 expands
+# to nothing — claude is called with its usual flags only. The value
+# itself is validated against [A-Za-z0-9._/-]+ at the dashboard server
+# (see _do_open_claude_tab) and via shutil.shell-style restrictions
+# below, so word-splitting can't be abused for injection.
+LAUNCH_BODY = (
+    # Mark every process started from this tab as workspace-launched, so
+    # `agent-event-notify` can route notifications to the dashboard only
+    # (and skip the desktop notify-send that would otherwise duplicate
+    # them). Also re-export AGENT_WORKSPACE_PORT from $6 so the hook
+    # POSTs back to *this* dashboard's port (gnome-terminal inherits
+    # env naturally, but propagating via a positional arg also handles
+    # terminals that spawn a fresh login shell).
+    'export AGENT_WORKSPACE_LAUNCHED=1; '
+    'export AGENT_WORKSPACE_PORT="$6"; '
+    'MODEL=""; '
+    '[ -n "$5" ] && MODEL="--model $5"; '
+    'cd "$1" && (claude --continue --name "$2" '
+    '--append-system-prompt "$3" $MODEL 2>/dev/null '
+    '|| claude --name "$2" --append-system-prompt "$3" $MODEL); '
+    'printf "\\e]0;%s\\a" "$4"; exec bash'
+)
+
+
+def launch_gnome(issue: str, working_dir: Path, tab_title: str,
+                  sys_prompt: str, model: str) -> subprocess.Popen:
+    # gnome-terminal 3.58: a single invocation can't open multiple tabs
+    # because `--` ends option parsing for the whole call. So we run
+    # one invocation per tab. `--tab` (without `--window`) attaches to
+    # the currently-focused gnome-terminal window — same window the
+    # user invoked agent-worktrees from.
+    return subprocess.Popen(
+        ["gnome-terminal", "--tab",
+         f"--title={tab_title}",
+         f"--working-directory={working_dir}",
+         "--", "bash", "-c", LAUNCH_BODY,
+         "_", str(working_dir), tab_title, sys_prompt, tab_title, model,
+         str(DASHBOARD_PORT)],
+    )
+
+
+def launch_ghostty(issue: str, working_dir: Path, tab_title: str,
+                    sys_prompt: str, model: str) -> subprocess.Popen:
+    # Ghostty has no CLI tab flag in 1.3.0-dev. With
+    # gtk-single-instance=true in ~/.config/ghostty/config, subsequent
+    # invocations attach to the existing window. Without it you get N
+    # separate windows. Either way the session-resume + per-issue
+    # title work.
+    return subprocess.Popen(
+        ["ghostty",
+         f"--title={tab_title}",
+         f"--working-directory={working_dir}",
+         "-e", "bash", "-c", LAUNCH_BODY,
+         "_", str(working_dir), tab_title, sys_prompt, tab_title, model,
+         str(DASHBOARD_PORT)],
+    )
+
+
+def launch_terminal_app(issue: str, working_dir: Path, tab_title: str,
+                          sys_prompt: str, model: str) -> subprocess.Popen:
+    """macOS Terminal.app launcher via AppleScript. `do script "<cmd>"`
+    opens a new Terminal window and runs the command; on a window that
+    already has tabs the user's Terminal preferences decide whether
+    "open new window" or "open new tab in current window" is used.
+
+    The inline shell is built directly (rather than reusing
+    LAUNCH_BODY's positional-arg pattern) because piping the body to
+    AppleScript requires quoting the whole thing as one string."""
+    # quoted single-arg strings for the inner bash command
+    import shlex
+    wd_q   = shlex.quote(str(working_dir))
+    name_q = shlex.quote(tab_title)
+    sys_q  = shlex.quote(sys_prompt)
+    model_arg = (f" --model {shlex.quote(model)}" if model else "")
+    inner = (
+        f"export AGENT_WORKSPACE_LAUNCHED=1; "
+        f"export AGENT_WORKSPACE_PORT={DASHBOARD_PORT}; "
+        f"cd {wd_q} && "
+        f"(claude --continue --name {name_q} "
+        f"--append-system-prompt {sys_q}{model_arg} 2>/dev/null || "
+        f"claude --name {name_q} --append-system-prompt {sys_q}{model_arg}); "
+        f"printf '\\033]0;%s\\a' {name_q}; exec bash"
+    )
+    # Escape for AppleScript: only backslash + double quote need
+    # escaping inside a quoted string literal.
+    safe = inner.replace("\\", "\\\\").replace('"', '\\"')
+    script = f'tell application "Terminal" to do script "{safe}"'
+    return subprocess.Popen(["osascript", "-e", script])
+
+
+def launch_wt(issue: str, working_dir: Path, tab_title: str,
+                sys_prompt: str, model: str) -> subprocess.Popen:
+    """Windows Terminal (wt.exe) launcher. `wt -w 0 nt` opens a new
+    tab in the focused Windows Terminal window — same UX as
+    `gnome-terminal --tab` on Linux.
+
+    The inner shell is a `cmd.exe` invocation (bash isn't guaranteed
+    on Windows; Git Bash is for the *install*, not for spawned tabs).
+    Because the path through wt's arg parsing eats commas + semicolons
+    unless quoted, we use `cmd /s /c` and a `"..."` literal for the
+    whole inner command. After claude exits we drop the user back to
+    `cmd.exe` so the tab stays open for inspection.
+    """
+    # cmd /c handles its own quoting: an outer pair survives because
+    # /s tells cmd not to strip them. Escape only the double quote
+    # inside the strings the user supplied — that's the one char that
+    # would terminate the literal prematurely.
+    def _q(s: str) -> str:
+        return s.replace('"', r'\"')
+    model_arg = (f" --model {_q(model)}" if model else "")
+    inner = (
+        f'set AGENT_WORKSPACE_LAUNCHED=1&&'
+        f'set AGENT_WORKSPACE_PORT={DASHBOARD_PORT}&&'
+        f'cd /d "{_q(str(working_dir))}"&&'
+        f'(claude --continue --name "{_q(tab_title)}" '
+        f'--append-system-prompt "{_q(sys_prompt)}"{model_arg} '
+        f'|| claude --name "{_q(tab_title)}" '
+        f'--append-system-prompt "{_q(sys_prompt)}"{model_arg})&&'
+        f'cmd /k'
+    )
+    return subprocess.Popen([
+        "wt.exe", "-w", "0", "nt",
+        "--title", tab_title,
+        "--startingDirectory", str(working_dir),
+        "cmd", "/s", "/c", inner,
+    ])
+
+
+LAUNCHERS = {
+    "gnome":    (launch_gnome,         0.2),
+    "ghostty":  (launch_ghostty,       0.3),
+    "terminal": (launch_terminal_app,  0.4),
+    "wt":       (launch_wt,            0.4),
+}
+
+
+def main() -> int:
+    args = parse_args()
+    terminal = detect_terminal(args.terminal)
+    worktrees_root = Path(args.worktrees).expanduser()
+
+    issues = collect_issues(worktrees_root, args.issue)
+    if not issues:
+        if args.issue:
+            sys.stderr.write(
+                f"no usable worktree for issue '{args.issue}' "
+                f"under {worktrees_root}\n")
+        else:
+            sys.stderr.write(
+                f"no usable worktrees under {worktrees_root}\n")
+        return 1
+
+    if terminal not in LAUNCHERS:
+        sys.stderr.write(f"unknown terminal: {terminal}\n")
+        return 1
+    launch_fn, sleep_between = LAUNCHERS[terminal]
+
+    # Validate --model against the same allowlist the dashboard server
+    # uses (defensive — the script can also be invoked directly).
+    model = args.model.strip()
+    if model and not re.match(r"^[A-Za-z0-9._/-]+$", model):
+        sys.stderr.write(f"invalid --model value: {args.model!r}\n")
+        return 1
+
+    procs: list[subprocess.Popen] = []
+    for issue, working_dir in issues:
+        ctx = build_context(issue, working_dir)
+        tab_title = build_tab_title(issue)
+        sys_prompt = f"{ctx}\n{PRELOAD_PROMPT}"
+        procs.append(launch_fn(issue, working_dir,
+                                tab_title, sys_prompt, model))
+        time.sleep(sleep_between)
+
+    # Wait for the launcher processes themselves to exit (the spawned
+    # terminal tabs detach and live independently).
+    rc = 0
+    for p in procs:
+        rc = max(rc, p.wait())
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main())

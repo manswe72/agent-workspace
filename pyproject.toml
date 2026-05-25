@@ -1,0 +1,39 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+# ── ruff (linter + formatter) ───────────────────────────────────────────────
+# Run with `python3 -m ruff check .` (lint) or `python3 -m ruff format .`
+# (format). The pre-push hook installed by setup.sh runs both, plus pytest,
+# and aborts the push on failure. Install ruff via:
+#   python3 -m pip install --user --break-system-packages ruff
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["data", "tests/__pycache__"]
+
+[tool.ruff.lint]
+# Conservative starter set — same families pyflakes covers, plus a few
+# bug-bear and naming rules. Easy to extend later without churning the
+# whole tree.
+select = [
+  "E",   # pycodestyle errors
+  "F",   # pyflakes
+  "W",   # pycodestyle warnings
+  "I",   # isort
+  "B",   # flake8-bugbear
+  "UP",  # pyupgrade
+]
+# Things that are useful in principle but produce noise on this codebase.
+# Each one has a brief why so future me knows whether it can be re-enabled.
+ignore = [
+  "E501",  # line too long — readable comments routinely exceed 100 cols
+  "E731",  # lambda assignment — used a few times in the request handlers
+  "B008",  # function-default-mutable-arg — used by argparse-style helpers
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+  "F401",  # unused-import — fixtures imported for side effects
+]

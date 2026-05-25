@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Agent Workspace
+GenericName=Coding-Agent Worktree Dashboard
+Comment=Local dashboard for ~/git/worktrees/<workspace>/<repo> with multi-provider agent CLI launcher
+Exec=agent-workspace
+Icon=io.github.agent_workspace.AgentWorkspace
+Terminal=false
+Categories=Development;
+Keywords=git;worktree;agent;claude;codex;aider;
+StartupWMClass=AgentWorkspace

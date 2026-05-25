@@ -1,0 +1,64 @@
+# Snap manifest for agent-workspace.
+#
+# Uses CLASSIC confinement — the dashboard must:
+#   1. Execute the user's terminal emulator (gnome-terminal, ghostty,
+#      alacritty, …) which lives outside the snap. Strict snaps cannot
+#      exec arbitrary host binaries.
+#   2. Shell out to `git` over `ssh://` with the user's ~/.ssh/ keys.
+#      Strict snap's `personal-files` interface requires manual user
+#      approval per snap which is bad UX.
+#   3. Write the agent CLI's `--mcp-config <path>` JSON file at a host-
+#      reachable path so Claude Code (running outside the snap) can
+#      read it.
+#
+# Snap Store review will ask for justification for classic — the three
+# points above are the official answer.
+#
+# Build (inside an LXD or Multipass VM):
+#   snapcraft pack
+# Install (once built):
+#   sudo snap install --classic --dangerous ./agent-workspace_*.snap
+
+name: agent-workspace
+title: Agent Workspace
+summary: Local dashboard for coding-agent CLI worktrees
+description: |
+  Agent Workspace is a small local HTTP dashboard that watches every
+  directory under ~/git/worktrees/<workspace>/<repo>, surfaces a
+  GitHub-style activity heatmap of your commits, and lets you launch
+  a coding-agent CLI in a terminal tab — Claude Code, OpenAI Codex,
+  Aider, Gemini CLI, Cursor Agent, or Crush.
+
+base: core22
+version: '0.1.0'
+grade: stable
+confinement: classic
+
+apps:
+  agent-workspace:
+    command: bin/agent-workspace
+
+parts:
+  agent-workspace:
+    plugin: dump
+    source: .
+    organize:
+      agent_workspace.py: share/agent-workspace/agent_workspace.py
+      awlib: share/agent-workspace/awlib
+      static: share/agent-workspace/static
+      templates: share/agent-workspace/templates
+      VERSION: share/agent-workspace/VERSION
+    stage:
+      - share/agent-workspace
+    prime:
+      - share/agent-workspace
+
+  launcher:
+    plugin: dump
+    source: packaging/snap
+    organize:
+      launcher.sh: bin/agent-workspace
+    stage:
+      - bin/agent-workspace
+    prime:
+      - bin/agent-workspace

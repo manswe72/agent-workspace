@@ -1,0 +1,3955 @@
+/* Three explicit themes:
+   - light    GitHub-style light
+   - dark     GitHub-style dark
+   - warm light look (white + warm orange)
+   The implicit (no data-theme) default = warm for system light,
+   GitHub-style dark for system dark. Each explicit data-theme below
+   wins over the system preference. */
+:root {
+  /* warm theme — used when no data-theme is set and system = light. */
+  --bg:        #f7f8fa;
+  --panel:     #ffffff;
+  --panel-2:   #f1f3f6;
+  --border:    #e3e6eb;
+  --border-2:  #eef0f3;
+  --fg:        #1f1f1f;
+  --fg-muted:  #5f6368;
+  --fg-strong: #0f0f0f;
+  --accent:    #ee5e35;
+  --success:   #2e7d32;
+  --warning:   #c77700;
+  --danger:    #c1272d;
+  --tint-success: rgba(46, 125, 50, 0.10);
+  --tint-warning: rgba(199, 119, 0, 0.12);
+  --tint-danger:  rgba(193, 39, 45, 0.10);
+  --tab-active-bg: #ffffff;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg:        #0d1117;
+    --panel:     #161b22;
+    --panel-2:   #1c232c;
+    --border:    #30363d;
+    --border-2:  #21262d;
+    --fg:        #c9d1d9;
+    --fg-muted:  #8b949e;
+    --fg-strong: #f0f6fc;
+    --accent:    #58a6ff;
+    --success:   #3fb950;
+    --warning:   #d29922;
+    --danger:    #f85149;
+    --tint-success: rgba(63, 185, 80, 0.10);
+    --tint-warning: rgba(210, 153, 34, 0.12);
+    --tint-danger:  rgba(248, 81, 73,  0.12);
+    --tab-active-bg: #0a0e14;
+  }
+}
+
+/* Explicit theme overrides — set on <html data-theme="..."> by JS.
+   Higher specificity than the media query above so the user's choice
+   always wins regardless of the OS setting. */
+:root[data-theme="light"] {
+  --bg:        #ffffff;
+  --panel:     #f6f8fa;
+  --panel-2:   #eaeef2;
+  --border:    #d0d7de;
+  --border-2:  #d8dee4;
+  --fg:        #1f2328;
+  --fg-muted:  #656d76;
+  --fg-strong: #1f2328;
+  --accent:    #0969da;
+  --success:   #1a7f37;
+  --warning:   #9a6700;
+  --danger:    #cf222e;
+  --tint-success: rgba(26, 127, 55, 0.10);
+  --tint-warning: rgba(154, 103, 0, 0.10);
+  --tint-danger:  rgba(207, 34, 46, 0.10);
+  --tab-active-bg: #c8d1da;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg:        #0d1117;
+  --panel:     #161b22;
+  --panel-2:   #1c232c;
+  --border:    #30363d;
+  --border-2:  #21262d;
+  --fg:        #c9d1d9;
+  --fg-muted:  #8b949e;
+  --fg-strong: #f0f6fc;
+  --accent:    #58a6ff;
+  --success:   #3fb950;
+  --warning:   #d29922;
+  --danger:    #f85149;
+  --tint-success: rgba(63, 185, 80, 0.10);
+  --tint-warning: rgba(210, 153, 34, 0.12);
+  --tint-danger:  rgba(248, 81, 73,  0.12);
+  --tab-active-bg: #0a0e14;
+  color-scheme: dark;
+}
+/* warm theme — bright white
+   cards, soft off-white page background, subtle gray borders,
+   warm orange as the accent. Status colours are warmer than
+   the GitHub light theme so they sit better against the warm
+   neutrals. */
+:root[data-theme="warm"] {
+  --bg:        #f7f8fa;
+  --panel:     #ffffff;
+  --panel-2:   #f1f3f6;
+  --border:    #e3e6eb;
+  --border-2:  #eef0f3;
+  --fg:        #1f1f1f;
+  --fg-muted:  #5f6368;
+  --fg-strong: #0f0f0f;
+  --accent:    #ee5e35;
+  --success:   #2e7d32;
+  --warning:   #c77700;
+  --danger:    #c1272d;
+  --tint-success: rgba(46, 125, 50, 0.10);
+  --tint-warning: rgba(199, 119, 0, 0.12);
+  --tint-danger:  rgba(193, 39, 45, 0.10);
+  --tab-active-bg: #ffffff;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+/* Skip-to-content link — visible only on keyboard focus, lets a
+   screen-reader / keyboard user jump past the toolbar. */
+.skip-to-content {
+  position: absolute; top: -40px; left: 6px;
+  background: var(--accent); color: #fff;
+  padding: 6px 12px; border-radius: 4px;
+  text-decoration: none; font-weight: 600;
+  z-index: 1100;
+  transition: top 120ms ease;
+}
+.skip-to-content:focus { top: 6px; outline: 3px solid var(--accent); }
+/* ── Server-unreachable banner ───────────────────────────────────────────
+   Shown by dashboard.js when the 5-min /api/status heartbeat fails (e.g.
+   the server was stopped, the PWA opened offline, or the network blipped).
+   Stays put until the next successful refresh hides it. */
+#server-status-banner {
+  position: fixed; top: 0; left: 0; right: 0;
+  z-index: 1200;
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.5rem 1rem;
+  background: #6a1f1f; color: #ffe8e0;
+  border-bottom: 1px solid #a33;
+  font-size: 0.9rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+  animation: ssb-slide 220ms ease-out;
+}
+#server-status-banner[hidden] { display: none; }
+#server-status-banner .ssb-icon { font-size: 1.1rem; }
+#server-status-banner .ssb-text { font-weight: 600; }
+#server-status-banner .ssb-detail { color: rgba(255,232,224,0.7); }
+#server-status-banner .ssb-retry {
+  margin-left: auto;
+  background: rgba(255,255,255,0.12);
+  color: inherit; border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 4px; padding: 0.2rem 0.6rem;
+  cursor: pointer; font: inherit;
+}
+#server-status-banner .ssb-retry:hover { background: rgba(255,255,255,0.22); }
+#server-status-banner .ssb-retry:disabled { opacity: 0.6; cursor: wait; }
+@keyframes ssb-slide {
+  from { transform: translateY(-100%); }
+  to   { transform: translateY(0); }
+}
+/* ── Splash / boot screen ──────────────────────────────────────────────── */
+#splash-screen {
+  position: fixed; inset: 0; z-index: 99999;
+  background: #0d1117;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  transition: opacity 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+}
+#splash-screen.fade-out { opacity: 0; pointer-events: none; }
+#splash-canvas { position: absolute; inset: 0; display: block; }
+.splash-card {
+  position: relative; z-index: 1;
+  text-align: center; padding: 36px 64px;
+  border: 1px solid rgba(32, 120, 220, 0.25);
+  background: rgba(13, 17, 23, 0.82);
+  backdrop-filter: blur(2px);
+}
+.splash-card::before, .splash-card::after {
+  content: ''; position: absolute;
+  width: 12px; height: 12px;
+  border-color: rgba(32, 120, 220, 0.6); border-style: solid;
+}
+.splash-card::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+.splash-card::after  { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+.splash-title {
+  font-family: 'JetBrains Mono', 'Fira Mono', monospace;
+  font-size: 26px; font-weight: 700; letter-spacing: 0.06em;
+  color: #fff;
+  text-shadow: 0 0 18px rgba(32, 120, 255, 0.7), 0 0 40px rgba(0, 80, 200, 0.35);
+  animation: splash-glow 2.4s ease-in-out infinite;
+}
+.splash-diamond { color: #3399ff; margin: 0 8px; }
+.splash-subtitle {
+  font-family: 'JetBrains Mono', 'Fira Mono', monospace;
+  font-size: 12px; letter-spacing: 0.45em;
+  color: #4477aa; margin-top: 10px;
+  animation: splash-fade-in 0.8s ease 0.4s both;
+}
+.splash-dots {
+  margin-top: 28px; display: flex; gap: 7px; justify-content: center;
+  animation: splash-fade-in 0.6s ease 0.8s both;
+}
+.splash-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: #1a8a5a;
+  animation: splash-dot-pulse 1.1s ease-in-out infinite;
+}
+.splash-dot:nth-child(2) { animation-delay: 0.18s; }
+.splash-dot:nth-child(3) { animation-delay: 0.36s; }
+@keyframes splash-glow {
+  0%, 100% { text-shadow: 0 0 12px rgba(32,120,255,0.6), 0 0 30px rgba(0,80,200,0.25); }
+  50%       { text-shadow: 0 0 28px rgba(32,150,255,1),  0 0 60px rgba(0,100,255,0.5); }
+}
+@keyframes splash-fade-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes splash-dot-pulse {
+  0%, 80%, 100% { transform: scale(0.75); opacity: 0.4; }
+  40%           { transform: scale(1.3);  opacity: 1; }
+}
+
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               Helvetica, Arial, sans-serif;
+  font-size: 14px; line-height: 1.55;
+  /* Trim the page-level padding so the dashboard uses as much of the
+     viewport as possible — the previous 1.5rem × 2rem framing felt
+     spacious but burned ~80 px of vertical real estate that the
+     terminal pane wants. */
+  margin: 0; padding: 0.5rem 0.8rem;
+  /* Use the whole viewport width — earlier we capped at 1400 px which
+     left a gap on wide monitors. */
+  max-width: 100%;
+}
+h1, h2, h3, h4 { color: var(--fg-strong); font-weight: 600; }
+h1 { margin: 0 0 0.25rem; font-size: 1.5rem; letter-spacing: -0.01em; }
+h2 { margin: 0 0 0.75rem; font-size: 1.1rem; }
+h3 { margin: 0; font-size: 13px; }
+h4 { margin: 0 0 0.4rem; font-size: 10px; color: var(--fg-muted);
+     text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+code, pre { font-family: "JetBrains Mono", "SF Mono", "Menlo", Consolas,
+            ui-monospace, monospace; font-feature-settings: "liga" 0; }
+code { font-size: 12px; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+/* (Old .app-header rules removed when the page title was dropped and
+   the profile button was moved into the toolbar.) */
+
+/* /healthz inline modal — pretty-printed JSON in monospace. The
+   .health-status pill in the header summarises HTTP code + ok flag,
+   tinted red if anything is broken. */
+.health-modal {
+  width: min(720px, 95vw);
+  max-height: 80vh;
+  display: flex; flex-direction: column;
+}
+.health-body {
+  margin: 0; padding: 1rem 1.2rem;
+  flex: 1 1 auto; overflow: auto;
+  font-family: "JetBrains Mono", monospace; font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap; word-break: break-word;
+}
+.health-status.ok  { color: var(--success, #2a9d4f); font-weight: 600; }
+.health-status.err { color: var(--danger,  #c1392b); font-weight: 600; }
+
+/* Restore-SQLite dialog. Same skeleton as the Add issue / Remove issue
+   modals — file picker, status block, danger-tinted submit button. */
+.restore-file-row {
+  display: flex; align-items: center; gap: 0.6rem;
+  margin: 0.6rem 0;
+}
+.restore-status      { margin-top: 0.6rem; font-size: 13px; }
+.restore-status.ok   { color: var(--success, #2a9d4f); }
+.restore-status.err  { color: var(--danger,  #c1392b); }
+
+/* Profile avatar + popover (housing per-user settings like editor pref). */
+.profile { position: relative; flex-shrink: 0; }
+.profile-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 1px solid var(--border);
+  color: #fff; font-weight: 600; font-size: 13px;
+  letter-spacing: 0.02em; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; user-select: none;
+  padding: 0;
+  transition: box-shadow 120ms ease;
+}
+.profile-avatar:hover, .profile-avatar:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.25);
+}
+.profile-popover {
+  position: absolute; right: 0; top: calc(100% + 0.4rem);
+  min-width: 480px; z-index: 20;
+  background: var(--panel); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 0.8rem;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  display: none;
+}
+/* Keep tab labels on a single line — when 5+ tabs are present we
+   need a touch more horizontal slack and `white-space: nowrap` on
+   the buttons themselves. */
+.profile-popover .profile-tabbar { flex-wrap: nowrap; overflow: hidden; }
+.profile-popover .profile-tab { white-space: nowrap; }
+/* Grid of notification-kind checkboxes inside the profile popover. */
+.notify-kinds-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 0.25rem 0.8rem; margin-top: 0.4rem;
+}
+.notify-kind-row {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 12px; cursor: pointer;
+}
+.notify-kind-row input { cursor: pointer; }
+
+/* Theme picker grid — 2x2 of theme cards inside the profile popover's
+   "Theme" tab. Each card shows a small swatch row + label + help. */
+.theme-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 0.5rem; margin-top: 0.4rem;
+}
+.theme-card {
+  display: flex; flex-direction: column; gap: 0.35rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--panel); color: var(--fg);
+  border: 1px solid var(--border-2); border-radius: 6px;
+  cursor: pointer; text-align: left;
+  font: inherit; font-size: 12px;
+  transition: border-color 80ms, background 80ms;
+}
+.theme-card:hover { background: var(--panel-2); }
+.theme-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.theme-card-swatches { display: inline-flex; gap: 3px; }
+.theme-card-swatch {
+  display: inline-block; width: 14px; height: 14px;
+  border-radius: 3px; border: 1px solid rgba(0, 0, 0, 0.2);
+}
+.theme-card-label { font-size: 12.5px; font-weight: 600; }
+.theme-card-help { font-size: 11px; color: var(--fg-muted); line-height: 1.3; }
+
+/* Tabs across the top of the profile popover (Dashboard / Theme /
+   Notify Me / Server). Each panel below sits in .profile-tabpanel
+   and keeps a stable min-height so switching tabs doesn't jump the
+   layout. */
+.profile-tabbar {
+  display: flex; gap: 4px;
+  border-bottom: 1px solid var(--border-2);
+  margin-bottom: 0.6rem;
+}
+.profile-tab {
+  background: transparent; color: var(--fg-muted);
+  border: 1px solid transparent; border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  padding: 0.35rem 0.7rem; cursor: pointer;
+  font: inherit; font-size: 12px;
+  margin-bottom: -1px;
+}
+.profile-tab:hover { color: var(--fg); }
+.profile-tab.active {
+  background: var(--panel-2); color: var(--fg);
+  border-color: var(--border-2); border-bottom-color: var(--panel-2);
+  font-weight: 600;
+}
+.profile-tabpanel { min-height: 14em; }
+.profile-tab-content { display: flex; flex-direction: column; }
+.profile-popover.open { display: block; }
+
+/* Sub-tab bar inside the Dashboard profile panel (General /
+   Advanced). Visually mirrors the outer .profile-tabbar (which
+   itself mirrors the issue tabs) — flat tabs with a bottom border
+   line and the active tab pulled up so it reads as part of the
+   panel below. */
+.profile-subtabbar {
+  display: flex; gap: 4px;
+  border-bottom: 1px solid var(--border-2);
+  margin: 0.2rem 0 0.6rem;
+}
+.profile-subtab {
+  background: transparent; color: var(--fg-muted);
+  border: 1px solid transparent; border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  padding: 0.3rem 0.7rem; cursor: pointer;
+  font: inherit; font-size: 12px;
+  margin-bottom: -1px;
+}
+.profile-subtab:hover { color: var(--fg); }
+.profile-subtab.active {
+  background: var(--panel-2); color: var(--fg);
+  border-color: var(--border-2); border-bottom-color: var(--panel-2);
+  font-weight: 600;
+}
+.profile-subsection { padding-top: 0.1rem; }
+
+/* ── Per-issue sub-tabs (Agent / Branches / Stashes / Messages) ───
+   Horizontal icon strip at the top of the issue body. Only rendered
+   when the user enables the inline agent console in Profile →
+   Dashboard. Inactive tabs are icon-only; the active tab also shows
+   its label so the user has an obvious "you are here". The right
+   half of the same row holds the active tab's action controls — for
+   the Agent sub-tab that's the quick-message dropdown + +/🗑. */
+/* Flex chain so the inline terminal can grow to fill all remaining
+   vertical space inside the issue body. Each link uses min-height: 0
+   so flex children can actually shrink/grow past their content size. */
+.issue-body-wrap { display: flex; flex-direction: column;
+                    align-items: stretch; gap: 4px;
+                    flex: 1 1 auto; min-height: 0; }
+.issue-body-content { flex: 1 1 auto; min-width: 0; min-height: 0;
+                       display: flex; flex-direction: column; }
+.issue-agent-panel { flex: 1 1 auto; min-height: 0; }
+/* Make body + #app flex columns so section.tab can claim all
+   remaining vertical space below the toolbar / stat-cards / tab
+   strip. min-height: 0 on the flex children lets them shrink past
+   their content size when needed. The section.tab.active rule that
+   actually flips display:block → flex lives near line 2632; this
+   block sets up the ancestor chain so flex:1 propagates correctly. */
+html, body { height: 100%; }
+body { display: flex; flex-direction: column; min-height: 100vh; }
+#app { flex: 1 1 auto; min-height: 0;
+       display: flex; flex-direction: column; }
+/* The sub-tab row: icon strip on the left, active-tab actions on
+   the right (pushed via margin-left: auto on .issue-subtab-actions). */
+.issue-subtab-row {
+  display: flex; align-items: center;
+  gap: 6px; padding: 2px 0;
+  border-bottom: 1px solid var(--border-2);
+  flex: 0 0 auto;
+}
+.issue-subtabbar-side {
+  display: flex; flex-direction: row; gap: 2px;
+  padding: 0; margin: 0;
+  /* Strip stays compact (doesn't claim free space) — actions on the
+     right side of the row absorb whatever's left. flex-shrink is
+     allowed so an overcrowded subtab strip can clip + scroll
+     instead of pushing the actions off the row. */
+  flex: 0 1 auto; min-width: 0;
+  overflow-x: auto; overflow-y: hidden;
+  scroll-behavior: smooth;
+  scrollbar-width: none;            /* Firefox */
+  flex-wrap: nowrap;
+}
+.issue-subtabbar-side::-webkit-scrollbar { display: none; }
+.issue-subtab-actions {
+  /* Grows to absorb remaining row width; children right-aligned so
+     action controls (quick-message bar, search, buttons) sit at the
+     trailing edge of the row regardless of which sub-tab is active. */
+  display: inline-flex; align-items: center; gap: 4px;
+  justify-content: flex-end;
+  flex: 1 1 auto; min-width: 0;
+}
+.issue-subtab-icon {
+  background: transparent; color: var(--fg-muted);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0 8px; cursor: pointer;
+  font: inherit; font-size: 13px; line-height: 1;
+  min-width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 5px;
+  flex: 0 0 auto;
+}
+.issue-subtab-icon .issue-subtab-icon-glyph {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 15px; line-height: 1;
+}
+/* Label is hidden for inactive tabs so the strip stays icon-only;
+   the active tab gets its label revealed alongside the icon — but
+   only when NOT in fullscreen. In fullscreen, every horizontal
+   pixel goes to the action buttons + title chip, so the strip is
+   icon-only there too. */
+.issue-subtab-icon .issue-subtab-label { display: none; font-weight: 500; }
+.issue-subtab-icon.active .issue-subtab-label { display: inline; }
+.agent-fullscreen .issue-subtab-icon.active .issue-subtab-label { display: none; }
+.issue-subtab-icon:hover {
+  background: var(--panel-2); color: var(--fg);
+  border-color: var(--border-2);
+}
+.issue-subtab-icon.active {
+  background: var(--panel-2); color: var(--fg);
+  border-color: var(--accent);
+}
+.issue-subpanel { display: block; }
+
+/* ── Agent sub-tab content ─────────────────────────────────────────
+   Controls row + xterm host + Agent information stack. Padded
+   minimally — every pixel saved gives the terminal more room. */
+.issue-agent-panel { display: flex; flex-direction: column; gap: 0.35rem; }
+.agent-controls {
+  display: flex; align-items: center; gap: 0.35rem; flex-wrap: nowrap;
+  padding: 0.2rem 0.4rem;
+  background: var(--panel-2); border: 1px solid var(--border-2);
+  border-radius: 6px;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+/* Stashes / Messages control rows hoisted into .issue-subtab-actions.
+   Compact — no grow needed, parent justify-content: flex-end pushes
+   them to the right edge. */
+.stashes-controls,
+.messages-controls {
+  display: flex; align-items: center; gap: 0.35rem; flex-wrap: nowrap;
+  padding: 0.2rem 0.4rem;
+  background: var(--panel-2); border: 1px solid var(--border-2);
+  border-radius: 6px;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+.stashes-controls .btn,
+.messages-controls .btn {
+  padding: 2px 8px; line-height: 1.4;
+  flex: 0 0 auto;
+}
+.agent-controls .btn {
+  padding: 2px 8px; line-height: 1.4;
+  flex: 0 0 auto;
+}
+.agent-nav-btn {
+  font-size: 11px;
+  min-width: 22px;
+  padding: 2px 6px !important;
+}
+
+/* Pinned General Agent tab — rendered as a sibling of nav.tabs
+   inside .tabs-wrap so the issue-strip's horizontal scroll can
+   never push it out of view. Default styling matches a regular
+   inactive nav.tabs button so the eye doesn't mistake it for the
+   currently-active tab; the active state then punches through
+   with the dashboard bg + strong fg, same as a real active tab. */
+.tabs-wrap > button.tab-general-agent {
+  flex: 0 0 auto;
+  background: var(--panel-2); color: var(--fg);
+  border: 1px solid var(--border); border-bottom: none;
+  padding: 0.55rem 1.05rem; cursor: pointer;
+  border-radius: 6px 6px 0 0; font: inherit; font-size: 15px;
+  margin-bottom: -1px;
+  margin-right: 4px;
+  display: inline-flex; align-items: center; gap: 0.35em;
+  transition: background 80ms ease, color 80ms ease, border-color 80ms ease;
+}
+.tabs-wrap > button.tab-general-agent:hover {
+  background: var(--panel); color: var(--fg-strong);
+  border-color: var(--accent);
+}
+.tabs-wrap > button.tab-general-agent.active {
+  background: var(--bg); color: var(--fg-strong);
+  border-color: var(--border);
+  font-weight: 600;
+}
+
+/* Starting tab — same shape as Agent, sits to its left when present. */
+.tabs-wrap > button.tab-starting {
+  flex: 0 0 auto;
+  background: var(--panel-2); color: var(--fg);
+  border: 1px solid var(--border); border-bottom: none;
+  padding: 0.55rem 1.05rem; cursor: pointer;
+  border-radius: 6px 6px 0 0; font: inherit; font-size: 15px;
+  margin-bottom: -1px;
+  margin-right: 4px;
+  display: inline-flex; align-items: center;
+  transition: background 80ms ease, color 80ms ease, border-color 80ms ease;
+}
+.tabs-wrap > button.tab-starting:hover {
+  background: var(--panel); color: var(--fg-strong);
+  border-color: var(--accent);
+}
+.tabs-wrap > button.tab-starting.active {
+  background: var(--bg); color: var(--fg-strong);
+  border-color: var(--border);
+  font-weight: 600;
+}
+.tab-general-agent .agent-icon-svg {
+  vertical-align: middle; width: 1.2em; height: 1.2em;
+}
+/* The general-agent SECTION has no H2 / no Branches sub-tab; its
+   only child is the agent panel which fills the available height. */
+.tab-general-agent-section { padding-top: 0.4rem; }
+.issue-agent-panel-general { flex: 1 1 auto; min-height: 0; }
+/* When MCP is off the General Agent panel is returned without the
+   sub-tab-row wrapper, so agent-controls is a full-width flex child of
+   the panel column. Right-align its buttons so they sit at the trailing
+   edge rather than the leading edge. */
+.issue-agent-panel-general .agent-controls { justify-content: flex-end; }
+
+/* Inline SVG agent icon — sized to match the surrounding text.
+   Block-level by default (SVG default) breaks the icon out onto its
+   own line inside a button, which is wrong for "🤖 Info"-style
+   chips. Force inline-block + a fixed height that matches the
+   button's text x-height. */
+.agent-icon-svg {
+  display: inline-block;
+  vertical-align: -0.15em;
+  width: 1.2em; height: 1.2em;
+}
+.agent-info-btn { display: inline-flex; align-items: center; gap: 0.3em; }
+.agent-info-btn .agent-icon-svg { width: 1.1em; height: 1.1em;
+                                   vertical-align: middle; }
+/* Open-in-editor button on the Agent controls row — hidden by
+   default (the issue title bar has its own ↗ Open) and only shown
+   when the panel is in fullscreen (where the title bar is
+   covered). Matches the H2 Open button's intent: opens the issue
+   worktree dir in the user's editor. */
+/* Title chip — hidden in normal mode (issue is identified by H2 +
+   tab strip). Revealed in fullscreen where those landmarks are gone.
+   Grows to push all action buttons to the right. */
+.agent-title-chip {
+  display: none;
+  font-size: 12px; color: var(--fg); font-weight: 600;
+  background: var(--panel); padding: 1px 6px; border-radius: 4px;
+  border: 1px solid var(--border);
+  flex: 0 1 auto; min-width: 0; overflow: hidden;
+}
+.agent-title-chip-text {
+  display: block; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-fullscreen .agent-title-chip {
+  display: inline-flex; align-items: center;
+  flex: 1 1 auto;
+}
+/* In fullscreen the controls row must fill the full row width so
+   the title chip can grow and push buttons to the right. */
+.agent-fullscreen .agent-controls {
+  flex: 1 1 auto; min-width: 0;
+}
+/* General Agent has no title chip, so nothing pushes the buttons
+   rightward inside the now-full-width controls bar. Right-align
+   explicitly. Targets the wrap (MCP on) and the panel (MCP off)
+   since agent-fullscreen is toggled onto both. */
+.general-agent-body-wrap.agent-fullscreen .agent-controls,
+.issue-agent-panel-general.agent-fullscreen .agent-controls {
+  justify-content: flex-end;
+}
+
+.agent-open-btn { display: none; }
+/* The controlsRow lives in the sub-tab row (.issue-subtab-actions)
+   now, so descendant selectors anchored on .issue-agent-panel can no
+   longer reach it. Use the .agent-fullscreen class — set on BOTH the
+   panel and its containing .issue-body-wrap — as the ancestor hook
+   so the same rules still match in either layout. */
+.agent-fullscreen .agent-open-btn {
+  display: inline-flex;
+}
+/* Fullscreen-only mirror of the issue-head [Notes][+] pair — the
+   head row is covered by the position:fixed wrap in fullscreen, so
+   without this surfacing the user has no way to open Notes. Hidden
+   in normal mode (where the head's own pair is visible). The
+   External button is the inverse: only shown outside fullscreen,
+   since the fullscreen toolbar is already tight. */
+.agent-notes-btn-group { display: none; }
+.agent-fullscreen .agent-notes-btn-group { display: inline-flex; }
+.agent-fullscreen .agent-external-btn { display: none; }
+/* Status indicator — icon-only (🟢 / ⚫) in the row; the title=
+   tooltip exposes the full "running · pid X · {age} ago" text on
+   hover. Compact width keeps the controls row short. */
+.agent-status-line {
+  font-size: 13px; color: var(--fg-muted);
+  line-height: 1; padding: 0 4px;
+  flex: 0 0 auto;
+  cursor: help;
+}
+.agent-repo-picker {
+  background: var(--panel); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 2px 6px; font: inherit; font-size: 12px;
+}
+/* Drag-and-drop into the agent console — visible affordance
+   while a file is hovering. The hint div is always in the DOM
+   but display:none until the host gets .is-dragover. */
+.agent-term-host.is-dragover {
+  outline: 2px dashed var(--accent, #1f5bd6);
+  outline-offset: -4px;
+}
+.agent-drop-hint {
+  position: absolute; inset: 0;
+  display: none; align-items: center; justify-content: center;
+  color: #fff; background: rgba(31, 91, 214, 0.35);
+  font-size: 18px; font-weight: 600;
+  pointer-events: none;
+  z-index: 5;
+}
+.agent-term-host.is-dragover .agent-drop-hint { display: flex; }
+
+.agent-term-host {
+  width: 100%;
+  /* Grow to fill the agent panel's remaining vertical space — the
+     flex column above lets us claim everything below the controls
+     row. Floor at 380 px so a short viewport still gets a workable
+     terminal. */
+  flex: 1 1 auto;
+  min-height: 380px;
+  height: auto;
+  border: 1px solid var(--border-2); border-radius: 6px;
+  /* Match the xterm dark palette's background so any moment when
+     xterm hasn't fully reflowed to host height shows as terminal
+     black, not the dashboard's light bg leaking through. */
+  background: #1e1e1e;
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+}
+.agent-term-placeholder {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--fg-muted); font-size: 13px;
+  text-align: center; padding: 1rem;
+}
+/* Make .xterm + .xterm-viewport fill the host so FitAddon has real
+   dimensions to measure. Leave .xterm-screen at its natural
+   rows×cellHeight — overriding that breaks xterm's scrollback
+   because the viewport then has nothing taller-than-itself to
+   scroll over. */
+.agent-term-host .xterm,
+.agent-term-host .xterm-viewport { height: 100% !important; }
+.agent-term-host .xterm-viewport { overflow-y: auto !important; }
+
+/* Fullscreen mode for the Agent sub-tab: pin the whole issue-body-
+   wrap above the rest of the dashboard so the sub-tab row (with the
+   moved agent controlsRow) stays visible at the top, with the
+   terminal filling the rest. */
+.issue-body-wrap.agent-fullscreen {
+  position: fixed; inset: 0; z-index: 200;
+  background: var(--bg);
+  padding: 0.6rem 0.8rem;
+  display: flex; flex-direction: column;
+  gap: 0.6rem;
+}
+.agent-fullscreen .agent-term-host {
+  flex: 1 1 auto; height: auto;
+}
+/* The agent panel inside a fullscreen wrap occupies the remaining
+   vertical space below the sub-tab row. */
+.issue-body-wrap.agent-fullscreen .issue-agent-panel {
+  flex: 1 1 auto; min-height: 0;
+}
+body.agent-fullscreen-active { overflow: hidden; }
+
+/* Agent terminal search overlay ─────────────────────────────────────────
+   Floats top-right of .agent-term-host (position:relative + overflow:hidden
+   already set). z-index:10 lifts it above the xterm canvas layers. */
+.agent-search-bar {
+  display: flex;
+  position: absolute;
+  top: 6px; right: 14px;
+  z-index: 10;
+  align-items: center;
+  gap: 3px;
+  background: #2a2a2a;
+  border: 1px solid #555;
+  border-radius: 6px;
+  padding: 3px 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+.agent-search-input {
+  font: 12px/1.4 "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border: 1px solid #555;
+  border-radius: 3px;
+  padding: 2px 6px;
+  width: 180px;
+  outline: none;
+}
+.agent-search-input:focus { border-color: #58a6ff; }
+.agent-search-count {
+  font-size: 11px;
+  color: #888;
+  min-width: 4em;
+  text-align: center;
+  white-space: nowrap;
+}
+.agent-search-bar .btn { padding: 1px 5px; font-size: 11px; }
+.agent-search-opt { color: #aaa; }
+.agent-search-opt.active { background: #58a6ff; color: #fff; border-color: #58a6ff; }
+.agent-search-nav, .agent-search-close { color: #ccc; }
+
+/* Quick message manage modal — checkbox multi-select */
+.quick-msg-check { margin-right: 0.4em; cursor: pointer; flex-shrink: 0; }
+.quick-msg-delete-sel { margin-right: 0.4em; }
+
+/* Agent information modal — fixed body height so flipping between
+   Activity / Messages doesn't resize the dialog. The body scrolls
+   internally when a tab's content overflows. Width is bounded so
+   the modal stays compact on wide monitors. */
+.agent-info-modal {
+  width: min(960px, 96vw);
+  max-width: none;
+  align-self: center;
+  height: auto;
+}
+.agent-info-modal-body {
+  height: min(520px, 70vh);
+  overflow: auto; padding: 0.4rem 0.6rem;
+}
+/* When the agent-details <details> lives inside the modal the
+   outer chrome is redundant — drop the border + redundant heading
+   so the modal frame is the only container. */
+.agent-info-modal-body details.agent-details {
+  border: none; padding: 0; margin: 0;
+}
+.agent-info-modal-body summary.agent-summary { display: none; }
+
+/* Free-text input for the Expected-repos preference in the Dashboard
+   profile's Advanced sub-tab. Fill the remaining row width like the
+   backup-dir-input does. */
+.expected-repos-input {
+  flex: 1 1 auto; min-width: 14em;
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 3px 6px; font: inherit; font-size: 12px;
+}
+.expected-repos-input:hover { border-color: var(--accent); }
+.expected-repos-input:focus { outline: none; border-color: var(--accent); }
+
+/* "📂 Browse" — small inline button on the Path stat row. */
+/* Browse + Reset buttons sit at the end of the Path row. Both are
+   fixed-size, same shape so the row stays neat. */
+.profile-path-browse,
+.profile-path-reset {
+  margin-left: 0.25rem;
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  height: 26px;
+  min-width: 30px;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: 0 0 auto;
+}
+
+/* Directory-tree dialog shown by the Browse button. */
+.worktrees-tree {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow: auto;
+  flex: 1 1 auto;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre;
+  background: var(--panel-2);
+  color: var(--fg);
+}
+.profile-header {
+  display: flex; align-items: center; gap: 0.7rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--border-2);
+  margin-bottom: 0.7rem;
+}
+.profile-avatar-lg {
+  width: 44px; height: 44px; font-size: 15px;
+  cursor: default;
+}
+.profile-avatar-lg:hover { box-shadow: none; }
+.profile-meta { min-width: 0; }
+.profile-name { font-weight: 600; color: var(--fg-strong); font-size: 13px; }
+.profile-email { font-size: 11.5px; color: var(--fg-muted);
+                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-section { display: flex; flex-direction: column; gap: 0.25rem; }
+.profile-section + .profile-section { margin-top: 0.6rem; }
+.profile-row { display: flex; align-items: center; gap: 0.5rem; font-size: 12px; }
+.profile-row-label { color: var(--fg-muted); min-width: 4em; }
+.profile-row-control { display: inline-flex; align-items: center;
+                       gap: 0.35rem; font-size: 12px; }
+.profile-row-control input[type="checkbox"] { accent-color: var(--accent); }
+.profile-row select {
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 3px 6px; font: inherit; font-size: 12px; flex: 1; min-width: 0;
+}
+.profile-row select:hover { border-color: var(--accent); }
+.profile-help { color: var(--fg-muted); font-size: 11.5px; margin-top: 0.2rem; }
+/* Stacked variant — label on its own line, control below. Used by the
+   Claude model picker so the multi-line radio rows have room. */
+.profile-row.profile-row-stacked {
+  display: block;
+}
+.profile-row.profile-row-stacked .profile-row-label {
+  display: block; min-width: 0;
+  margin-bottom: 0.3rem;
+}
+
+/* Claude model radio list — mirrors the layout of `claude /model`:
+   one row per model, short name + summary + tagline. */
+.claude-model-options {
+  display: flex; flex-direction: column; gap: 0.35rem;
+}
+.claude-model-option {
+  display: flex; align-items: flex-start; gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.claude-model-option:hover { background: var(--panel); }
+.claude-model-option input[type="radio"] {
+  accent-color: var(--accent);
+  margin-top: 2px; flex: 0 0 auto;
+}
+.claude-model-option-body { min-width: 0; }
+.claude-model-option-head {
+  font-size: 12px; line-height: 1.3;
+}
+.claude-model-option-head strong { color: var(--fg-strong); }
+.claude-model-rec { color: var(--success); font-weight: 600; font-size: 11.5px; }
+.claude-model-summary { color: var(--fg-muted); }
+.claude-model-tagline {
+  color: var(--fg-muted); font-size: 11px; margin-top: 1px;
+}
+/* Visually group each setting (label/control + help text) so it's
+   obvious which help line belongs to which control. Background matches
+   the active profile tab so the panel reads as a coherent surface. */
+.profile-group {
+  background: var(--panel-2);
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  padding: 0.55rem 0.7rem;
+}
+.profile-group + .profile-group { margin-top: 0.5rem; }
+.profile-divider { height: 1px; background: var(--border-2); margin: 0.7rem -0.8rem; }
+.profile-section-title { font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--fg-muted); font-weight: 600;
+  margin-bottom: 0.35rem; }
+.profile-stats { display: flex; flex-direction: column; gap: 0.2rem;
+  font-size: 12px; margin-bottom: 0.5rem; }
+.profile-stat-row { display: flex; gap: 0.7rem; align-items: center; }
+.profile-stat-row .profile-stat-label {
+  color: var(--fg-muted); min-width: 5em; font-size: 11.5px;
+}
+.profile-stat-row.muted { color: var(--fg-muted); }
+/* Two-up button rows in the profile → Server panel. Each row has
+   equal-width siblings so the labels line up vertically; the icon
+   sits in a fixed-width slot on the left so the labels themselves
+   line up across both rows even when icons have different widths. */
+.profile-actions-row {
+  display: flex; gap: 0.5rem; margin-top: 0.5rem;
+}
+.profile-actions-row > .profile-action-btn { flex: 1 1 0; }
+.profile-action-btn {
+  display: inline-flex; align-items: center; justify-content: flex-start;
+  gap: 0.5rem;
+  padding: 6px 12px;
+  text-align: left;
+}
+.profile-action-btn .btn-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.4em; flex-shrink: 0;
+}
+.profile-action-btn .btn-label { flex: 1 1 auto; }
+
+.cleanup-months-input {
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 3px 6px; font: inherit; font-size: 12px;
+  width: 5em;
+}
+.cleanup-months-input:hover { border-color: var(--accent); }
+
+/* ── Backup tab ─────────────────────────────────────────────────── */
+.backup-num-input,
+.backup-dir-input {
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 3px 6px; font: inherit; font-size: 12px;
+}
+.backup-num-input { width: 5em; }
+.backup-dir-input { flex: 1 1 auto; min-width: 14em; }
+.backup-num-input:hover, .backup-dir-input:hover { border-color: var(--accent); }
+.backup-num-input:focus, .backup-dir-input:focus {
+  outline: none; border-color: var(--accent);
+}
+.backup-dir-row { gap: 0.5rem; align-items: center; }
+/* Indent the meta line past the label column so it starts at the
+   same left edge as the Directory input value above it. The label
+   has min-width 4em and the row's flex gap is 0.5rem — sum below. */
+.backup-meta-row { padding-left: calc(4em + 0.5rem); }
+.backup-meta { font-size: 11.5px; }
+.backup-meta-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-muted);
+  font-weight: 600;
+  margin-right: 0.25em;
+}
+
+.backup-history { max-height: 220px; overflow-y: auto; }
+.backup-history-table {
+  width: 100%; border-collapse: collapse; font-size: 11.5px;
+}
+.backup-history-table th, .backup-history-table td {
+  text-align: left; padding: 4px 6px;
+  border-bottom: 1px solid var(--border-2);
+}
+.backup-history-table th { color: var(--fg-muted); font-weight: 600; }
+.backup-history-table td.num,
+.backup-history-table th.num { text-align: right; white-space: nowrap; }
+.backup-history-table .backup-path-cell {
+  max-width: 18em; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; color: var(--fg-muted); font-family: var(--mono);
+}
+.backup-history-table tr.backup-row-failed td { color: var(--danger); }
+.backup-history-action-cell { width: 2em; text-align: right; }
+.backup-history-delete-btn {
+  padding: 2px 6px; font-size: 11px; line-height: 1;
+}
+/* "View all backups" button under the inline (single-row) history
+   table — small spacer so the button doesn't crowd the table. */
+.backup-history-more { margin-top: 0.4rem; }
+/* When the full history opens in a modal it can scroll vertically. */
+.backup-history-modal-body { padding: 0.5rem 1rem 1rem; overflow-y: auto; }
+.backup-history-modal-body .backup-path-cell { max-width: 32em; }
+
+/* Server log console (modal) */
+.logs-modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  display: flex; align-items: stretch; justify-content: center;
+  /* z-index 300 so modals layer above the fullscreen Agent panel
+     (z-index 200) — without this, opening the Agent information
+     dialog from inside a fullscreen panel would render the modal
+     behind the terminal. */
+  padding: 3rem 1.5rem; z-index: 300;
+}
+.logs-modal {
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 8px;
+  width: 100%; max-width: 1100px; display: flex; flex-direction: column;
+  box-shadow: 0 14px 40px rgba(0,0,0,0.35);
+  overflow: hidden;
+}
+.logs-modal-head {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--border-2);
+  background: var(--panel);
+}
+.logs-modal-head .muted { font-size: 12px; }
+
+/* Reset-workspace warning modal — two stacked dialogs leading to a
+   destructive POST. The .reset-modal-head is the standard logs-modal
+   head; .reset-modal-body keeps the multi-line warning legible by
+   preserving newlines from the i18n string. */
+.reset-modal { max-width: 560px; align-self: center; height: auto; }
+.reset-modal-body {
+  padding: 1rem 1.1rem; font-size: 13px; line-height: 1.5;
+  white-space: pre-line;
+}
+.reset-modal-body p { margin: 0; }
+.reset-modal-foot {
+  display: flex; gap: 0.5rem; justify-content: flex-end;
+  padding: 0.6rem 0.8rem; border-top: 1px solid var(--border-2);
+  background: var(--panel);
+}
+
+/* Trash button next to the Path row's Browse button — same shape,
+   destructive tint on hover. Sizing lives in the shared
+   .profile-path-browse,.profile-path-reset rule above. */
+.profile-path-reset {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--border);
+}
+.profile-path-reset:hover {
+  background: var(--tint-danger);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* First-run notification-permission nudge — small, centered, with
+   Enable / Not now buttons in the footer. */
+.notif-prompt-modal { max-width: 480px; align-self: center; height: auto; }
+.notif-prompt-body { padding: 1rem 1.1rem; font-size: 13px; line-height: 1.5; }
+.notif-prompt-body p { margin: 0; }
+.notif-prompt-foot {
+  display: flex; gap: 0.5rem; justify-content: flex-end;
+  padding: 0.6rem 0.8rem; border-top: 1px solid var(--border-2);
+  background: var(--panel);
+}
+.log-toggle { font-size: 12px; color: var(--fg-muted); display: inline-flex;
+  align-items: center; gap: 0.3rem; cursor: pointer; user-select: none; }
+.log-toggle input { accent-color: var(--accent); }
+.logs-modal-filters {
+  display: flex; gap: 0.4rem; align-items: center;
+  padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border-2);
+  background: var(--panel-2);
+}
+.log-chip {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 2px 10px; border-radius: 999px; font-size: 12px;
+  border: 1px solid var(--border-2); background: transparent;
+  color: var(--fg-muted); cursor: pointer; user-select: none;
+  opacity: 0.55;
+  text-decoration: line-through;
+  transition: opacity 100ms ease, background 100ms ease, border-color 100ms ease;
+}
+.log-chip:hover { opacity: 0.85; }
+.log-chip input { position: absolute; opacity: 0; pointer-events: none; }
+.log-chip::before {
+  content: '○'; font-size: 10px; line-height: 1;
+}
+.log-chip.on {
+  opacity: 1;
+  text-decoration: none;
+  font-weight: 600;
+}
+.log-chip.on::before { content: '●'; }
+.log-chip-error.on { border-color: var(--danger);  background: var(--tint-danger);  color: var(--danger); }
+.log-chip-warn.on  { border-color: var(--warning); background: var(--tint-warning); color: var(--warning); }
+.log-chip-info.on  { border-color: var(--accent);  background: rgba(9,105,218,0.12); color: var(--accent); }
+.logs-search {
+  flex: 1; min-width: 8em;
+  background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 3px 8px; font: inherit; font-size: 12px;
+}
+.logs-search:focus { outline: none; border-color: var(--accent); }
+.logs-list {
+  flex: 1; min-height: 0; overflow-y: auto;
+  margin: 0; padding: 0 0.8rem 0.5rem; font-size: 12px;
+  background: var(--bg); white-space: pre-wrap; word-break: break-word;
+  /* Per-column widths — overridable inline by the resizer (saved to
+     localStorage). Defaults fit "HH:MM:SS" (8 chars) and "ERROR" (5 chars). */
+  --col-time-w: 90px;
+  --col-level-w: 60px;
+}
+.logs-header {
+  display: grid;
+  grid-template-columns: var(--col-time-w) var(--col-level-w) 1fr;
+  gap: 0.6rem;
+  padding: 0.5rem 0 0.3rem;
+  position: sticky; top: 0; z-index: 1;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 10px; font-weight: 600; color: var(--fg-muted);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.logs-header > div { position: relative; padding-right: 4px; }
+.logs-header .resizer {
+  position: absolute;
+  right: -0.4rem;  /* sit on the gap between columns */
+  top: -0.5rem; bottom: -0.3rem; width: 8px;
+  cursor: col-resize; user-select: none;
+  z-index: 3;
+}
+.logs-header .resizer:hover,
+.logs-header .resizer.dragging {
+  background: var(--accent); opacity: 0.5;
+}
+.log-rows { display: contents; }
+.log-line {
+  display: grid;
+  grid-template-columns: var(--col-time-w) var(--col-level-w) 1fr;
+  gap: 0.6rem;
+  padding: 1px 0; line-height: 1.5;
+}
+.log-ts    { color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+.log-level {
+  text-transform: uppercase; letter-spacing: 0.04em; font-size: 10px;
+  font-weight: 600; align-self: center; padding: 0 4px;
+  border-radius: 3px; text-align: center; line-height: 1.6;
+}
+.log-level-info  { color: var(--accent);  background: rgba(9,105,218,0.10); }
+.log-level-warn  { color: var(--warning); background: var(--tint-warning); }
+.log-level-error { color: var(--danger);  background: var(--tint-danger); }
+.log-msg { color: var(--fg); }
+.log-line.log-error .log-msg { color: var(--danger); }
+.log-line.log-warn  .log-msg { color: var(--warning); }
+
+/* Week summary modal */
+.week-modal { max-width: 1100px; }
+.week-body {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 0.8rem;
+  display: flex; flex-direction: column; gap: 0.9rem;
+}
+.week-stats {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+.week-stat {
+  background: var(--panel); border: 1px solid var(--border-2); border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+}
+.week-stat-value { font-size: 22px; font-weight: 600; color: var(--fg-strong); line-height: 1.1; }
+.week-stat-label { color: var(--fg-muted); font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.06em; margin-top: 0.15rem; }
+.week-stat-sub { color: var(--fg-muted); font-size: 11.5px; margin-top: 0.2rem; }
+.week-card {
+  background: var(--panel); border: 1px solid var(--border-2); border-radius: 6px;
+  padding: 0.7rem 0.8rem;
+}
+.week-card h4 { margin: 0 0 0.5rem; }
+.week-day-grid {
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+.week-day-cell {
+  display: flex; flex-direction: column; gap: 0.25rem;
+  padding: 0.4rem; background: var(--bg);
+  border: 1px solid var(--border-2); border-radius: 4px;
+  font-size: 11.5px;
+}
+.week-day-label { font-weight: 600; color: var(--fg-strong); display: flex;
+                  justify-content: space-between; }
+.week-day-date  { color: var(--fg-muted); font-weight: 400; font-size: 11px; }
+.week-day-bar   { height: 5px; background: var(--panel-2); border-radius: 999px; overflow: hidden; }
+.week-day-bar-fill { height: 100%; }
+.week-day-bar-fill.commits { background: var(--accent); }
+.week-day-bar-fill.tokens  { background: var(--warning); }
+.week-day-counts {
+  display: flex; justify-content: space-between; gap: 0.3rem;
+  font-variant-numeric: tabular-nums;
+}
+.week-table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+}
+.week-table th, .week-table td {
+  padding: 4px 6px; border-bottom: 1px solid var(--border-2);
+  text-align: left; vertical-align: top;
+}
+.week-table th { color: var(--fg-muted); font-weight: 600; font-size: 11px;
+                 text-transform: uppercase; letter-spacing: 0.04em; }
+.week-table td.num, .week-table th.num { text-align: right;
+                                          font-variant-numeric: tabular-nums; }
+.week-table td.subjects {
+  max-width: 35ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--fg-muted);
+}
+.week-table tr:hover td { background: var(--panel-2); }
+/* Sortable column headers — clickable, with a small ▲/▼ indicator on
+   the active sort key. Cursor + slight tint communicate the affordance. */
+.week-table th.sortable {
+  cursor: pointer; user-select: none;
+}
+.week-table th.sortable:hover { color: var(--accent); }
+.week-table th.sortable.sorted { color: var(--accent); }
+.week-table h4.with-action { display: flex; align-items: center; justify-content: space-between; }
+.week-card h4.with-action { display: flex; align-items: center;
+                            justify-content: space-between; margin-bottom: 0.5rem; }
+.worklog-table td.num { font-variant-numeric: tabular-nums; }
+.worklog-table .btn-link.danger { color: var(--danger); background: none;
+                                   border: none; cursor: pointer; padding: 0 4px; }
+.worklog-table .btn-link.danger:hover { text-decoration: underline; }
+/* Pin column widths so timer rows (empty comment) and agent rows (long
+   comment) align with the header instead of the browser auto-distributing
+   slack to whichever column happens to have content per-row. */
+.worklog-table { table-layout: fixed; }
+.worklog-table th:nth-child(1), .worklog-table td:nth-child(1) { width: 7em; }
+.worklog-table th:nth-child(2), .worklog-table td:nth-child(2) { width: 10em; }
+.worklog-table th:nth-child(3), .worklog-table td:nth-child(3) { width: 4.5em; }
+.worklog-table th:nth-child(4), .worklog-table td:nth-child(4) { width: 5em; }
+.worklog-table th:nth-child(6), .worklog-table td:nth-child(6) { width: 2.6em; text-align: center; }
+.worklog-table td:nth-child(5) {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Agent-derived worklog rows (source=agent, computed from JSONL session
+   activity) look slightly muted so it's clear they're auto-generated,
+   not entered by the user. NB: distinct class name from the unrelated
+   `.agent-row` flex layout used in the per-issue Claude agent section —
+   applying `display: flex` to a <tr> would break the table cell layout. */
+.worklog-table tr.wl-agent-row td { font-style: italic; }
+.worklog-table tr.wl-agent-row td:first-child { color: var(--fg-muted); }
+
+/* Source-column icons. Ditches the old "agent / timer / manual" text
+   for compact emoji glyphs (🤖 / ⏱ / ✎). Tooltip on each carries the
+   source name for accessibility. */
+.worklog-source-icon {
+  font-size: 13px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-style: normal; /* don't italicise the emoji on agent rows */
+}
+.worklog-table td.source-cell { text-align: center; }
+.week-row { cursor: pointer; }
+.week-list-table th { background: var(--panel-2); position: sticky; top: 0; }
+
+/* btn-link — text-style action buttons used in the week-summary header for
+   prev/next nav. */
+.btn-link {
+  background: transparent; border: 1px solid transparent;
+  color: var(--accent); cursor: pointer; padding: 1px 4px;
+  border-radius: 4px; font-size: 13px;
+}
+.btn-link:hover { background: var(--panel-2); }
+.btn-link:disabled, .btn-link[disabled] {
+  color: var(--border-2); cursor: default; background: transparent;
+}
+.btn-secondary {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--fg);
+}
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Timer card — sits below the activity heatmap on the main dashboard.
+   Native <details> for collapse/expand; the summary stays visible when
+   collapsed and shows the running state at a glance. */
+.timer-card {
+  background: var(--panel); border: 1px solid var(--border-2);
+  border-radius: 6px; padding: 0; margin: 0 0 1.25rem;
+  font-size: 13px;
+}
+.timer-card > summary.timer-card-summary {
+  display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  padding: 0.55rem 0.8rem; cursor: pointer; user-select: none;
+  list-style: none;          /* hide default disclosure triangle */
+  color: var(--fg-strong);
+  min-height: 2.5rem;        /* match the activity card line height */
+}
+.timer-card > summary::-webkit-details-marker { display: none; }
+/* Match the +/− disclosure used by the activity heatmap and repo cards
+   so all collapsible sections share one visual idiom. */
+.timer-card > summary::before {
+  content: '+'; color: var(--fg-muted); font-size: 16px; font-weight: 400;
+  line-height: 1; margin-right: 0.1rem; min-width: 1ch; text-align: center;
+}
+.timer-card[open]    > summary::before { content: '−'; color: var(--accent); }
+.timer-card > summary:hover::before { color: var(--accent); }
+.timer-card-body { padding: 0 0.8rem 0.7rem; display: flex;
+                   flex-direction: column; gap: 0.4rem; }
+.timer-head {
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+}
+.timer-state {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--fg-muted);
+  padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--border-2); background: var(--bg);
+}
+.timer-state.running { color: var(--success); border-color: var(--success);
+                       background: var(--tint-success); }
+.timer-state.idle    { color: var(--fg-muted); }
+.timer-issue { color: var(--fg-strong); }
+.timer-elapsed { color: var(--accent); font-variant-numeric: tabular-nums;
+                 font-weight: 600; }
+.timer-card input[type="text"], .timer-card input[type="number"], .timer-card input[type="date"],
+.timer-card select {
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 3px 8px; font: inherit; font-size: 13px;
+}
+.timer-card select:hover { border-color: var(--accent); }
+.timer-issue-input { width: 14em; }
+.timer-comment { flex: 1; min-width: 12em; }
+.timer-card input:focus { outline: none; border-color: var(--accent); }
+.timer-stop { color: var(--danger); border-color: var(--danger); }
+.timer-comment-row { display: flex; }
+
+/* Manual worklog modal */
+.manual-worklog-modal {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  width: 100%; max-width: 460px; align-self: center;
+  margin: auto; box-shadow: 0 14px 40px rgba(0,0,0,0.35);
+  display: flex; flex-direction: column; max-height: 90vh; overflow: hidden;
+}
+.manual-worklog-body {
+  padding: 0.8rem; display: flex; flex-direction: column; gap: 0.6rem;
+}
+.manual-worklog-body label {
+  display: flex; flex-direction: column; gap: 0.2rem; font-size: 11.5px;
+  color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.04em;
+  font-weight: 600;
+}
+.manual-worklog-body input {
+  background: var(--panel); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 4px 8px; font: inherit; font-size: 13px;
+  text-transform: none; letter-spacing: normal; font-weight: 400;
+}
+.manual-worklog-body input:focus { outline: none; border-color: var(--accent); }
+.manual-worklog-actions { display: flex; gap: 0.4rem; justify-content: flex-end;
+                          margin-top: 0.4rem; }
+
+/* Refresh-now button hosts the auto-refresh countdown as an inline
+   SVG progress ring. The countdown text moved into the button's
+   title tooltip; the ring fills clockwise as the next refresh
+   approaches. */
+.refresh-now-btn {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+}
+.refresh-progress {
+  flex: 0 0 auto;
+  width: 14px; height: 14px;
+  /* Spin the whole svg so 0° dash-offset lands at 12-o'clock instead
+     of 3-o'clock — matches the way users expect a progress ring. */
+  transform: rotate(-90deg);
+  overflow: visible;
+}
+.refresh-progress-bg {
+  stroke: var(--border-2);
+  stroke-width: 2.5;
+}
+.refresh-progress-fg {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  /* 1s linear matches the updateCountdown() tick rate, so the ring
+     animates smoothly between updates. */
+  transition: stroke-dashoffset 1s linear;
+}
+/* When the timer has elapsed (`refreshing` class), spin the whole
+   ring so the user gets a visible "in-flight" indicator. */
+.refresh-now-btn.refreshing .refresh-progress {
+  animation: refresh-spin 1.2s linear infinite;
+}
+@keyframes refresh-spin {
+  from { transform: rotate(-90deg); }
+  to   { transform: rotate(270deg); }
+}
+
+.meta { color: var(--fg-muted); margin-bottom: 1.25rem; font-size: 12px; }
+.meta code { color: var(--fg); background: var(--panel); padding: 1px 6px;
+             border-radius: 4px; border: 1px solid var(--border-2); }
+.profile-stat-row code.profile-path {
+  font-size: 11px; color: var(--fg);
+  background: var(--bg); padding: 1px 6px;
+  border: 1px solid var(--border-2); border-radius: 4px;
+  /* Long paths scroll horizontally inside the field so the row
+     stays one-line and the action buttons keep their fixed
+     position. flex-min-width:0 lets the code shrink instead of
+     pushing the buttons off the row. */
+  flex: 1 1 auto; min-width: 0;
+  white-space: nowrap; overflow-x: auto;
+}
+
+.toolbar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+.toolbar .filters-toggle.on {
+  background: var(--tint-success); color: var(--success);
+  border-color: var(--success);
+}
+/* "Pinned only" toggle — same on-state treatment as the filters
+   button, in the warning palette so a glance at the toolbar tells
+   you the tab strip is filtered. */
+.toolbar .pinned-only-toggle.on {
+  background: var(--tint-warning); color: var(--warning);
+  border-color: var(--warning);
+}
+/* "Compact" toolbar toggle — uses the success palette like the
+   filters button so the three toolbar toggles each carry a distinct
+   on-state colour (success / warning / success). */
+.toolbar .compact-toolbar-toggle.on {
+  background: var(--tint-success); color: var(--success);
+  border-color: var(--success);
+}
+
+/* ── Compact dashboard ───────────────────────────────────────────
+   Toggled via the "Compact" checkbox in the profile popover.
+   Default ON. Hides the noisiest always-visible decoration on each
+   repo card (subtitle, worktree path, disk size badge, inline
+   ↓N ↑N sync counters, and the entire footer with Branch age /
+   Last Claude / Last build). The data is still reachable via the
+   hover popover on the repo title and the expanded details pane. */
+body.compact-dashboard .repo-card .repo-head .branch,
+body.compact-dashboard .repo-card .repo-head .wt-path,
+body.compact-dashboard .repo-card .repo-head .disk-badge,
+body.compact-dashboard .repo-card .repo-label .repo-sync-counts,
+body.compact-dashboard .repo-card .footer,
+/* Issue-level Fetch all / Pull all pair — duplicates the per-repo
+   git ops on every card, so hide it in compact mode. */
+body.compact-dashboard h2.issue-head .issue-git-btn-group { display: none; }
+body.compact-dashboard .repo-card summary.repo-summary {
+  padding-top: 0.25rem; padding-bottom: 0.25rem;
+}
+body.compact-dashboard .repo-card { margin-bottom: 0.4rem; }
+
+/* ── Tab strip — dim inactive tabs without affecting their hover
+   popovers. The earlier `> *` filter rule bled onto the popover
+   descendants (CSS filter / opacity on a parent renders to all
+   descendants including position:fixed children), so hovering an
+   inactive tab showed a near-invisible tooltip.
+   Mitigation: use plain `color` for popover-host elements (the issue
+   ID text, the ⓘ icon, the ↗ gitweb link) and reserve filter /
+   opacity for the generic ⚠N warning badge. The notification badges
+   (.pending-events-badge / .pending-todos-badge) follow their own
+   freshness rule below and are intentionally excluded. */
+nav.tabs button:not(.active) {
+  color: var(--fg-muted);
+}
+nav.tabs button:not(.active) .badge:not(.pending-events-badge):not(.pending-todos-badge) {
+  filter: grayscale(0.85);
+  opacity: 0.72;
+}
+nav.tabs button:not(.active):hover .badge:not(.pending-events-badge):not(.pending-todos-badge) {
+  filter: grayscale(0.4);
+  opacity: 0.95;
+}
+
+/* ── Notification badge freshness. Default state is dim/quiet; new
+   events add .badge-fresh which restores colour and runs a 7-second
+   `forwards` animation that ends back in the dim state. After the
+   animation finishes the visual end-state matches the static stale
+   rule, so subsequent re-renders look identical whether the class is
+   present or not. */
+.pending-events-badge,
+.pending-todos-badge {
+  filter: grayscale(0.7);
+  opacity: 0.55;
+}
+.pending-events-badge.badge-fresh,
+.pending-todos-badge.badge-fresh {
+  animation: badge-pulse 7s linear forwards;
+}
+@keyframes badge-pulse {
+  0%, 70% { filter: none; opacity: 1; }
+  100%    { filter: grayscale(0.7); opacity: 0.55; }
+}
+/* The filter / sort / search row lives below the toolbar. Collapsed by
+   default — the ☰ Filters button toggles a 'open' class that fades it
+   in. Margin only when open so the layout doesn't reserve space. */
+.filters-row {
+  display: none;
+  align-items: center; gap: 0.5rem; flex-wrap: wrap;
+  padding: 0.5rem 0.7rem; margin-bottom: 1rem;
+  background: var(--panel); border: 1px solid var(--border-2);
+  border-radius: 6px;
+}
+.filters-row.open { display: flex; }
+.toolbar .toggle { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--fg-muted); font-size: 12px; cursor: pointer; user-select: none; }
+.toolbar .toggle input { accent-color: var(--accent); }
+.toolbar .toggle .badge-count { color: var(--fg); }
+
+.sort-control { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--fg-muted); font-size: 12px; }
+.sort-control select {
+  background: var(--panel); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 2px 4px; font: inherit; font-size: 12px;
+}
+.sort-control select:hover { border-color: var(--accent); }
+
+.search-box { display: inline-flex; align-items: center; }
+.search-box input {
+  background: var(--panel); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 3px 8px; font: inherit; font-size: 12px;
+  width: 11rem;
+}
+.search-box input:hover  { border-color: var(--accent); }
+.search-box input:focus  { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px var(--tint-accent, rgba(9,105,218,0.18)); }
+.search-box input::placeholder { color: var(--fg-muted); }
+
+/* Inline toast for sync-now feedback (replaces alert()) */
+.toast {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 3px 9px; border-radius: 4px; font-size: 12px;
+  border: 1px solid var(--border); background: var(--panel);
+  color: var(--fg);
+  opacity: 1; transition: opacity 400ms ease-in-out;
+}
+.toast.toast-ok    { border-color: var(--success); color: var(--success); }
+.toast.toast-warn  { border-color: var(--warning); color: var(--warning); }
+.toast.toast-error { border-color: var(--danger);  color: var(--danger);  }
+.toast.fade { opacity: 0; }
+
+/* ── Per-issue Claude agent collapsible (sits below the repo cards) */
+details.agent-details {
+  margin-top: 0; margin-bottom: 0.7rem;  /* same gap as between repo cards */
+  border: 1px solid var(--border-2);
+  border-radius: 6px; background: var(--panel);
+}
+details.agent-details > summary.agent-summary {
+  list-style: none; cursor: pointer; user-select: none;
+  display: flex; align-items: baseline; gap: 0.7rem;
+  padding: 0.5rem 0.8rem; color: var(--fg-strong);
+}
+details.agent-details > summary.agent-summary::-webkit-details-marker { display: none; }
+details.agent-details > summary.agent-summary::before {
+  content: '+'; color: var(--fg-muted); font-size: 16px; font-weight: 400;
+  width: auto; min-width: 0; text-align: center; line-height: 1;
+  margin-right: -0.3rem;
+}
+details.agent-details[open] > summary.agent-summary::before { content: '−'; color: var(--accent); }
+details.agent-details[open] > summary.agent-summary { border-bottom: 1px solid var(--border-2); }
+.agent-title { font-weight: 600; }
+.agent-meta { color: var(--fg-muted); font-size: 12px; }
+/* Inner tab strip inside the agent block — Activity vs. Messages. */
+.agent-inner-tabs {
+  display: flex; gap: 0.4rem;
+  border-bottom: 1px solid var(--border-2);
+  padding: 0 0.8rem;
+}
+.agent-inner-tab {
+  background: transparent; border: 1px solid transparent;
+  padding: 4px 10px; border-radius: 4px 4px 0 0;
+  font: inherit; font-size: 12px;
+  color: var(--fg-muted); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  border-bottom: 2px solid transparent;
+}
+.agent-inner-tab:hover { color: var(--fg); }
+.agent-inner-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.agent-inner-tab .badge-pending {
+  background: var(--tint-danger); color: var(--danger);
+  padding: 0 6px; border-radius: 999px; font-size: 10.5px;
+  font-weight: 600;
+}
+/* Reserve a stable height so switching between Activity and Messages
+   never jumps the page — same trick as the repo-card inner panels. */
+.agent-inner-panel { padding: 0.5rem 0.8rem 0.7rem; min-height: 14em; }
+
+/* Tab-strip pending-event badge — clickable, jumps to issue + messages. */
+nav.tabs button .pending-events-badge {
+  display: inline-flex; align-items: center; gap: 2px;
+  background: var(--tint-danger); color: var(--danger);
+  border: 1px solid var(--danger); border-radius: 999px;
+  padding: 0 6px; margin-left: 0.4em;
+  font-size: 10.5px; font-weight: 600;
+  cursor: pointer;
+}
+nav.tabs button .pending-events-badge:hover { background: var(--danger); color: #fff; }
+
+/* Tab-strip pending-todo badge — same shape as the bell, different
+   colour. Click opens the Notes modal for the issue. */
+nav.tabs button .pending-todos-badge {
+  display: inline-flex; align-items: center; gap: 2px;
+  background: var(--tint-warning); color: var(--warning);
+  border: 1px solid var(--warning); border-radius: 999px;
+  padding: 0 6px; margin-left: 0.4em;
+  font-size: 10.5px; font-weight: 600;
+  cursor: pointer;
+}
+nav.tabs button .pending-todos-badge:hover { background: var(--warning); color: #fff; }
+
+/* Tab-strip MCP unread-mail badge — same shape as the others, brand
+   accent. Click opens the per-agent Messages modal. Lives on both
+   issue tabs (.tab-*) and the pinned General Agent tab so the
+   selector targets all tab buttons inside .tabs-wrap. */
+.tabs-wrap button.tab .mcp-unread-badge,
+nav.tabs button .mcp-unread-badge {
+  display: inline-flex; align-items: center; gap: 2px;
+  background: var(--tint-accent, #e6f0ff); color: var(--accent, #1f5bd6);
+  border: 1px solid var(--accent, #1f5bd6); border-radius: 999px;
+  padding: 0 6px; margin-left: 0.4em;
+  font-size: 10.5px; font-weight: 600;
+  cursor: pointer;
+}
+.tabs-wrap button.tab .mcp-unread-badge:hover,
+nav.tabs button .mcp-unread-badge:hover {
+  background: var(--accent, #1f5bd6); color: #fff;
+}
+
+/* Messages pane head — used both inside the General Agent's Messages
+   sub-tab and inside the per-issue Messages modal. Inbox/Outbox tabs
+   render as inline buttons; the .active class is shared with the
+   modal-head style above. */
+.mcp-pane {
+  display: flex; flex-direction: column;
+  /* Fill the issue-body-content's column so the body scroll area
+     can grow to the full viewport height. min-height:0 lets a
+     flex child shrink past its content size. */
+  flex: 1 1 auto; min-height: 0;
+}
+/* Wrappers that host the pane (per-issue Messages sub-panel +
+   the modal body in openAgentMessagesModal) need to participate
+   in the flex chain too — otherwise .mcp-pane has nothing to
+   stretch against and falls back to its content height. */
+.issue-messages-panel {
+  flex: 1 1 auto; min-height: 0;
+  display: flex; flex-direction: column;
+}
+.mcp-pane-head {
+  display: flex; align-items: center; gap: 0.15rem;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--border, #d0d7e0);
+}
+.mcp-pane-head .mcp-search,
+.messages-controls .mcp-search,
+.stashes-controls .mcp-search {
+  font: inherit;
+  padding: 0.15rem 0.5rem;
+  height: 1.7em;
+  width: 16em;
+  margin-right: 0.4rem;
+  border: 1px solid var(--border, #d0d7e0);
+  border-radius: 4px;
+  background: var(--bg, #fff);
+  color: inherit;
+}
+.mcp-pane-title { font-weight: 600;
+                   display: inline-flex; align-items: center; gap: 0.35rem; }
+/* Agent-icon when used as a pane title: size it to match the
+   📬 emoji in the Messages title so the two sub-tabs visually
+   rhyme. The SVG has no intrinsic size; we anchor on a relative
+   em height + auto width. */
+.mcp-pane-icon { height: 1.1em; width: auto; }
+.mcp-pane-head .btn.btn-inline.active,
+.messages-controls .btn.btn-inline.active {
+  background: var(--accent, #1f5bd6); color: #fff;
+  border-color: var(--accent, #1f5bd6);
+}
+/* Segmented Thread / Received / Sent group — three buttons read
+   as one control. No gap; inner borders collapsed; rounded only
+   on the outer edges. */
+.mcp-filter-group {
+  display: inline-flex;
+  gap: 0;
+}
+.mcp-filter-group .btn.btn-inline {
+  border-radius: 0;
+  margin: 0;
+}
+.mcp-filter-group .btn.btn-inline:first-child {
+  border-top-left-radius: 4px;
+  border-bottom-left-radius: 4px;
+}
+.mcp-filter-group .btn.btn-inline:last-child {
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
+}
+/* Collapse the duplicate inner border between adjacent siblings. */
+.mcp-filter-group .btn.btn-inline + .btn.btn-inline {
+  margin-left: -1px;
+}
+
+/* Messages modal — list rows + compose form. */
+.mcp-msg-body-wrap {
+  display: flex; flex-direction: column; gap: 0.5rem;
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  padding: 0.5rem 0.75rem;
+}
+.mcp-msg-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.mcp-msg-row {
+  border: 1px solid var(--border, #d0d7e0);
+  border-radius: 6px; padding: 0.4rem 0.6rem;
+  background: var(--bg-soft, #f7f9fc);
+}
+.mcp-msg-row.mcp-msg-unread {
+  border-color: var(--accent, #1f5bd6);
+  background: var(--tint-accent, #e6f0ff);
+}
+/* Thread view: tint incoming vs outgoing so the conversation reads
+   like a chat log. Indents are applied as inline margin-left from
+   JS (one ~1.2rem step per reply depth). */
+.mcp-msg-row.mcp-msg-out {
+  border-left: 3px solid var(--accent, #1f5bd6);
+}
+.mcp-msg-row.mcp-msg-in {
+  border-left: 3px solid var(--success, #2c8a4a);
+}
+.mcp-msg-head {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 12px;
+}
+.mcp-msg-kind {
+  text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: 10.5px; color: var(--accent, #1f5bd6);
+  font-weight: 600;
+}
+.mcp-msg-who { font-weight: 600; }
+.mcp-msg-ref {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px; opacity: 0.8;
+}
+.mcp-msg-body {
+  margin-top: 0.25rem;
+  white-space: pre-wrap;
+  font-size: 13px;
+}
+.mcp-msg-action {
+  padding: 0 0.4rem;
+  line-height: 1.4;
+  font-size: 12px;
+  margin-left: 0.2rem;
+}
+.mcp-msg-del:hover { background: var(--danger, #c93e3e); color: #fff; }
+
+/* Stash file-list — +N green, −N red, matching git's add/remove
+   convention. Used both inline (Stashes sub-tab) and in the modal. */
+.stash-added   { color: var(--success, #2c8a4a); font-variant-numeric: tabular-nums; }
+.stash-removed { color: var(--danger,  #c93e3e); margin-left: 0.6rem;
+                 font-variant-numeric: tabular-nums; }
+/* Inline expand under each stash row. The toggle (+/−) lives in
+   the row head; the holder hangs below the message body and only
+   shows when expanded. */
+/* Repo filter + free-text search in the Stashes pane head.
+   Both reuse the .mcp-search shape so they visually rhyme with
+   the Messages search box. */
+.stash-search { width: 12em; }
+.stash-repo-pick {
+  width: 12em;
+  margin-right: 0.4rem;
+}
+
+/* Stash row: toggle is its own left column, everything else
+   (head + message body + file list) flows in the right column
+   so the wrapped lines line up with the head row instead of
+   running back under the toggle. */
+.mcp-msg-row.stash-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding-left: 0.2rem;
+}
+.stash-toggle {
+  font-family: var(--mono, ui-monospace, monospace);
+  width: 1.6em; text-align: center;
+  margin: 0;
+  flex: 0 0 auto;
+}
+.stash-row-body {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; flex-direction: column;
+}
+/* Inline stash message — pushes the date to the right and
+   ellipsizes when there isn't room. Full text shows via the
+   `title=` attribute on hover. */
+.stash-msg {
+  flex: 1 1 auto; min-width: 0;
+  margin-left: 0.4rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 12px; color: inherit;
+}
+.stash-date { margin-left: 0.6rem; }
+.stash-files {
+  display: flex; flex-direction: column;
+  margin-top: 0.4rem; gap: 0.15rem;
+  border-top: 1px dashed var(--border, #d0d7e0);
+  padding-top: 0.4rem;
+}
+.stash-file-row {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 12px;
+}
+.stash-file-path {
+  font-family: var(--mono, ui-monospace, monospace);
+  word-break: break-all;
+}
+
+/* Auto-update banner — pinned at the top of #app, only visible
+   when origin/<branch> is ahead of HEAD. Uses the accent tint so
+   it's noticeable without being alarming. */
+.update-banner {
+  display: flex; align-items: center; gap: 0.5rem;
+  margin: 0.3rem 0.6rem;
+  padding: 0.4rem 0.8rem;
+  background: var(--tint-accent, #e6f0ff);
+  color: var(--accent, #1f5bd6);
+  border: 1px solid var(--accent, #1f5bd6);
+  border-radius: 6px;
+  font-size: 13px;
+}
+.update-banner-title  { font-weight: 600; }
+.update-banner-sub    { color: inherit; }
+.update-banner-sub .muted { color: var(--fg-muted, #6c7785); }
+.update-banner-go     { /* primary already styled */ }
+.update-banner-dismiss { /* keep stock .btn */ }
+
+/* Restart overlay — covers the dashboard while the helper kills +
+   respawns the server. Spinner is the same '⟳' character we use
+   on the refresh button. */
+.update-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex; align-items: center; justify-content: center;
+}
+.update-overlay-card {
+  background: var(--bg, #fff); color: inherit;
+  padding: 1.4rem 2rem; border-radius: 8px;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0.8rem; min-width: 16em;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.update-overlay-spinner {
+  font-size: 32px; line-height: 1;
+  animation: cwUpdateSpin 1.2s linear infinite;
+}
+@keyframes cwUpdateSpin {
+  from { transform: rotate(0deg);   }
+  to   { transform: rotate(360deg); }
+}
+
+/* Three-button thread-delete confirm — fits on one row, Cancel
+   on the left so an accidental Enter doesn't nuke the
+   conversation. */
+.mcp-del-modal { min-width: 22em; max-width: 32em; height: auto; align-self: center; }
+.mcp-del-body  { padding: 1rem 1.2rem; font-size: 13px; }
+.mcp-del-foot  {
+  display: flex; align-items: center; gap: 0.5rem;
+  justify-content: flex-end;
+  padding: 0.5rem 0.8rem 0.8rem;
+}
+
+/* In-reply-to thread chip — clicking scrolls to the parent row
+   and pulses it briefly. */
+.mcp-msg-parent {
+  display: inline-flex; align-items: center;
+  background: var(--tint-accent, #e6f0ff);
+  color: var(--accent, #1f5bd6);
+  border: 1px solid var(--accent, #1f5bd6);
+  border-radius: 999px;
+  padding: 0 6px; font-size: 10.5px; font-weight: 600;
+  cursor: pointer; margin-left: 0.4em;
+}
+.mcp-msg-parent:hover { background: var(--accent, #1f5bd6); color: #fff; }
+/* Per-thread expand toggle on the root row — same chip shape as
+   the in-reply-to indicator. Click to fold/unfold the subtree. */
+.mcp-thread-toggle {
+  display: inline-flex; align-items: center;
+  background: var(--bg-soft, #f1f3f5);
+  color: inherit;
+  border: 1px solid var(--border, #d0d7e0);
+  border-radius: 999px;
+  padding: 0 6px; font-size: 10.5px; font-weight: 600;
+  cursor: pointer; margin-left: 0.4em;
+}
+.mcp-thread-toggle:hover { background: var(--accent, #1f5bd6); color: #fff;
+                           border-color: var(--accent, #1f5bd6); }
+.mcp-thread-expand-btn { margin-left: 0.25rem; }
+
+/* Quick-messages cluster — sits to the LEFT of the running
+   status, inline on the same row as the agent action buttons.
+   The four pieces (select, Send, ➕, 🗑) render as one
+   segmented control: zero gap, inner borders collapsed, only
+   the outer corners rounded. !important on the segmented bits
+   so the more-specific .agent-controls .btn (and .agent-controls'
+   flex gap) cannot break the seam. */
+.agent-quick-bar {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0 !important;
+  flex: 0 0 auto;
+  margin-right: 0.4rem;
+}
+.agent-quick-bar .quick-msg-select,
+.agent-quick-bar > .btn {
+  height: 1.9em;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  padding-top: 0; padding-bottom: 0;
+  box-shadow: none;
+}
+.agent-quick-bar > :first-child {
+  border-top-left-radius: 4px !important;
+  border-bottom-left-radius: 4px !important;
+}
+.agent-quick-bar > :last-child {
+  border-top-right-radius: 4px !important;
+  border-bottom-right-radius: 4px !important;
+}
+/* Collapse the duplicate inner border between adjacent siblings. */
+.agent-quick-bar > * + * { margin-left: -1px !important; }
+.agent-quick-bar .quick-msg-select {
+  font: inherit;
+  width: 14em; min-width: 0;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border, #d0d7e0);
+  background: var(--bg, #fff);
+  color: inherit;
+}
+.agent-quick-bar .quick-msg-add,
+.agent-quick-bar .quick-msg-remove {
+  padding-left: 0.4rem; padding-right: 0.4rem;
+}
+
+/* Manage-modal rows — list of user-added quick messages with an
+   × per row. Built-ins are not shown (locked); the empty state
+   in the modal explains. */
+.quick-msg-manage-list {
+  display: flex; flex-direction: column; gap: 0.25rem;
+  padding: 0.5rem 0.75rem 0.75rem;
+  max-height: 50vh; overflow-y: auto;
+}
+.quick-msg-manage-row {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border, #d0d7e0);
+  border-radius: 4px;
+  background: var(--bg-soft, #f7f9fc);
+}
+.quick-msg-manage-text {
+  flex: 1 1 auto; min-width: 0;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+  white-space: pre-wrap; word-break: break-word;
+}
+
+/* Notes modal — small per-issue filter dropdown next to the search
+   box, so users can scope to General Agent or any issue without
+   touching the binary all-mode toggle button. */
+.notes-issue-filter {
+  font: inherit;
+  width: 14em;
+  height: 1.9em;
+  padding: 0.2rem 0.4rem;
+  margin-left: 0.4rem;
+  border: 1px solid var(--border, #d0d7e0);
+  border-radius: 4px;
+  background: var(--bg, #fff);
+  color: inherit;
+}
+@keyframes mcpRowFlash {
+  0%   { box-shadow: 0 0 0 2px var(--accent, #1f5bd6); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.mcp-msg-flash { animation: mcpRowFlash 1.4s ease-out; }
+
+/* "Replying to #N" indicator above the compose row when the user
+   hit ↩ on a message but hasn't yet sent the reply. */
+.mcp-reply-chip-host {
+  padding: 0.25rem 0.75rem 0;
+}
+.mcp-reply-chip {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  background: var(--tint-accent, #e6f0ff);
+  color: var(--accent, #1f5bd6);
+  border: 1px solid var(--accent, #1f5bd6);
+  border-radius: 999px;
+  padding: 0 0.5rem; font-size: 11px; font-weight: 600;
+}
+.mcp-reply-clear {
+  padding: 0 0.3rem; line-height: 1; font-size: 11px;
+  background: transparent; border: 0; color: inherit;
+  cursor: pointer;
+}
+.mcp-compose {
+  display: grid;
+  grid-template-columns: minmax(8em, 14em) minmax(0, 1fr) auto;
+  gap: 0.4rem;
+  padding: 0.35rem 0.75rem;
+  border-bottom: 1px solid var(--border, #d0d7e0);
+  align-items: center;
+  flex: 0 0 auto;
+  background: var(--panel-2);
+}
+.mcp-compose .mcp-compose-to,
+.mcp-compose .mcp-compose-body {
+  font: inherit;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border, #d0d7e0);
+  border-radius: 4px;
+  background: var(--bg, #fff);
+  color: inherit;
+  line-height: 1.6;
+  height: 1.9em;
+  box-sizing: border-box;
+}
+.mcp-compose .btn { height: 1.9em; padding-top: 0; padding-bottom: 0; }
+
+/* Inline compose: when ↩ Reply is clicked the compose row moves
+   inside the targeted message row. Visually anchor it with a
+   subtle indent + left border so it reads as a child of that
+   message. Slightly tighter padding than the top compose. */
+.mcp-compose.mcp-compose-inline {
+  margin-top: 0.4rem;
+  margin-left: 1.2rem;
+  padding: 0.3rem 0.5rem;
+  border-left: 3px solid var(--accent, #1f5bd6);
+  border-top: 1px solid var(--border, #d0d7e0);
+  border-bottom: 0;
+  background: var(--bg-soft, #f7f9fc);
+  border-radius: 4px;
+}
+
+/* Notes / Add-note buttons in the issue head — wrapped in a
+   .notes-btn-group so the parent <h2.issue-head>'s gap only spaces
+   the group as a whole, not the buttons within it. gap: 0 + flat
+   inner edges + extra-rounded outer corners make the pair read as
+   one segmented "Notes / +" control. The right-cluster push lives
+   on the leading action button (.console-btn) — see h2.issue-head
+   rules below. */
+.notes-btn-group {
+  display: inline-flex; align-items: center; gap: 0;
+}
+
+/* Issue-level Fetch all / Pull all — paired buttons. Same flat-inner
+   edges + extra-rounded outer corners as .notes-btn-group so the
+   pair reads as a single segmented control. */
+.issue-git-btn-group {
+  display: inline-flex; align-items: center; gap: 0;
+}
+.issue-git-btn-group .issue-git-btn:first-child {
+  border-radius: 10px 0 0 10px;
+}
+.issue-git-btn-group .issue-git-btn:last-child {
+  border-radius: 0 10px 10px 0;
+}
+.issue-git-btn.git-op-running { opacity: 0.6; cursor: wait; }
+
+/* Per-issue 🗑 Remove worktree button — small, icon-only, slightly
+   muted so it doesn't dominate the head's button cluster. The
+   destructive intent is gated behind the explicit confirmation
+   dialog `#remove-issue-dialog`, not the button itself. */
+.issue-remove-btn {
+  padding: 6px 10px;
+  color: var(--fg-muted);
+  background: transparent;
+  border-color: var(--border-2);
+}
+.issue-remove-btn:hover {
+  color: var(--danger, #c1392b);
+  border-color: var(--danger, #c1392b);
+  background: var(--tint-danger, rgba(193, 57, 43, 0.08));
+}
+
+/* Remove-issue confirmation dialog — reuses the .add-issue-modal
+   skeleton but with destructive-action accents. */
+.remove-issue-opt {
+  display: block;
+  margin: 0.5rem 0;
+  line-height: 1.6;
+}
+.remove-issue-opt input[type="checkbox"] {
+  vertical-align: middle;
+  margin-right: 0.3rem;
+}
+.remove-issue-opt code {
+  font-size: 0.85em; padding: 1px 4px;
+  background: var(--panel-2); border-radius: 3px;
+  white-space: nowrap;
+}
+/* The Remove-worktree dialog has more inline text than the Add-issue
+   form (two checkbox rows with command snippets). Give it a touch more
+   breathing room so the snippets don't get squeezed onto sub-lines. */
+#remove-issue-dialog .add-issue-modal { width: min(640px, 92vw); }
+.remove-issue-results { margin-top: 0.6rem; }
+.remove-issue-progress {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+.remove-issue-spinner {
+  display: inline-block; font-size: 1.1em; line-height: 1;
+  animation: cwUpdateSpin 1s linear infinite;
+}
+.remove-issue-table {
+  border-collapse: collapse; width: 100%; font-size: 12px;
+}
+.remove-issue-table th,
+.remove-issue-table td {
+  padding: 4px 8px; text-align: left;
+  border-bottom: 1px solid var(--border-2);
+}
+.remove-issue-table td.ok  { color: var(--success, #2a9d4f); }
+.remove-issue-table td.err { color: var(--danger,  #c1392b); }
+.remove-issue-table td.detail {
+  font-family: "JetBrains Mono", monospace; font-size: 11px;
+  color: var(--fg-muted);
+  max-width: 28em; overflow-wrap: break-word;
+}
+.btn-danger {
+  background: var(--danger, #c1392b);
+  color: #fff; border-color: var(--danger, #c1392b);
+}
+.btn-danger:hover { filter: brightness(1.05); }
+.btn-danger:disabled { opacity: 0.6; cursor: wait; }
+.issue-head .notes-add-btn { padding: 4px 8px; font-weight: 600; }
+.notes-btn-group .notes-btn {
+  border-radius: 10px 0 0 10px;
+}
+.notes-btn-group .notes-add-btn {
+  border-radius: 0 10px 10px 0;
+}
+.notes-btn-count {
+  display: inline-block; min-width: 1.4em; padding: 0 0.4em;
+  margin-left: 0.4em; border-radius: 999px;
+  background: var(--tint-warning); color: var(--warning);
+  font-size: 11px; font-weight: 600; text-align: center;
+}
+
+/* Notes modal table — mirrors the events table styling. Auto-layout
+   so the variable number of columns (Issue is conditional on cross-
+   issue mode) doesn't need a separate fixed-width table per mode.
+   Per-column whitespace is controlled by the col-class hooks below. */
+.notes-table { table-layout: auto; width: 100%; }
+.notes-table .notes-sel-col     { width: 1.6em; text-align: center; padding: 0; }
+.notes-table .notes-drag-col    { width: 1.4em; padding: 0; color: var(--fg-muted);
+                                   text-align: center; user-select: none; }
+.notes-table .notes-issue-col   { width: 8em; white-space: nowrap; }
+.notes-table .notes-actions-col { width: 9em; text-align: right; }
+/* "Manual" sort toggle on the actions header — looks like a chip when
+   off, filled when on. Keeps the table head visually balanced. */
+.notes-manual-toggle {
+  font: inherit; font-size: 11px; font-weight: 600;
+  background: transparent;
+  border: 1px solid var(--border-2);
+  color: var(--fg-muted);
+  padding: 2px 8px; border-radius: 999px;
+  cursor: pointer;
+}
+.notes-manual-toggle:hover { color: var(--fg); border-color: var(--fg); }
+.notes-manual-toggle.on {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
+.note-content { white-space: pre-wrap; word-wrap: break-word; }
+
+/* Search box just under the modal header. Full width, slight inset
+   so it lines up with the filter chips and table cells. */
+.notes-search-row { padding: 0.5rem 1rem 0.25rem; }
+.notes-search-input {
+  width: 100%; box-sizing: border-box;
+  font: inherit; font-size: 13px;
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border-2); border-radius: 6px;
+  padding: 6px 10px;
+}
+.notes-search-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.notes-search-input::-webkit-search-cancel-button { cursor: pointer; }
+
+/* Filter rows — stacked under the search box. The .notes-filter-row
+   wrapper lets us keep status / priority / tag chips on their own
+   lines so a long tag list doesn't wrap-mix with status chips. */
+.notes-filter-row {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 4px 1rem;
+  align-items: center;
+}
+.notes-filter-row + .notes-filter-row { border-top: none; padding-top: 0; }
+.notes-tag-row { padding-top: 2px; }
+.note-tag-chip {
+  font: inherit; font-size: 11px; font-weight: 500;
+  padding: 2px 8px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  background: transparent; color: var(--fg-muted);
+  cursor: pointer;
+}
+.note-tag-chip:hover { color: var(--fg); border-color: var(--fg); }
+.note-tag-chip.on {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
+.notes-tag-clear { font-size: 11px; padding: 2px 8px; margin-left: 0.4rem; }
+
+/* Priority filter chips — colour-coded like statuses. */
+.log-chip.note-pri-high.on   { border-color: var(--danger);  color: var(--danger); }
+.log-chip.note-pri-normal.on { border-color: var(--fg);      color: var(--fg); }
+.log-chip.note-pri-low.on    { border-color: var(--fg-muted); color: var(--fg-muted); }
+
+/* Bulk-action bar — appears above the table once at least one row is
+   ticked, disappears when the selection is cleared. */
+.notes-bulk-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem;
+  padding: 0.5rem 1rem;
+  background: var(--tint-warning);
+  border-top: 1px solid var(--warning);
+  border-bottom: 1px solid var(--warning);
+}
+.notes-bulk-count { font-weight: 600; color: var(--warning); }
+.notes-bulk-control {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; color: var(--fg-muted);
+}
+.notes-bulk-control select {
+  font: inherit; font-size: 12px;
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border-2); border-radius: 4px;
+  padding: 2px 4px;
+}
+
+/* Priority pill, mirrors .note-status-select. Uses the same chevron
+   trick so the inline <select> reads as a coloured pill. */
+.note-priority-select {
+  font: inherit; font-size: 11px; font-weight: 600;
+  padding: 1px 18px 1px 7px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 9px) 7px, calc(100% - 5px) 7px;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+}
+.note-priority-select.note-pri-high   { background-color: var(--tint-danger); color: var(--danger); }
+.note-priority-select.note-pri-normal { background-color: var(--panel-2);    color: var(--fg); }
+.note-priority-select.note-pri-low    { background-color: var(--panel-2);    color: var(--fg-muted); }
+.note-priority-select:hover { filter: brightness(1.1); }
+
+/* Inline edit fields — assignee / tags / due. Look like the status
+   selector when focused, plain text when not. */
+.note-assignee-input, .note-tags-input {
+  font: inherit; font-size: 12px;
+  width: 100%; box-sizing: border-box;
+  background: transparent; color: var(--fg);
+  border: 1px solid transparent;
+  padding: 2px 4px; border-radius: 4px;
+}
+.note-assignee-input:focus, .note-tags-input:focus {
+  background: var(--bg); border-color: var(--border-2);
+  outline: none;
+}
+.note-assignee-input::placeholder,
+.note-tags-input::placeholder { color: var(--fg-muted); font-style: italic; }
+
+.note-due-input {
+  font: inherit; font-size: 12px;
+  background: transparent; color: var(--fg);
+  border: 1px solid transparent;
+  padding: 1px 4px; border-radius: 4px;
+}
+.note-due-input:focus {
+  background: var(--bg); border-color: var(--border-2); outline: none;
+}
+/* Due-date relative label sits under the input so the table cell
+   stays compact even with the picker rendered. */
+.note-due-rel {
+  font-size: 11px; color: var(--fg-muted);
+  margin-top: 2px;
+}
+td.note-due-overdue { background: rgba(193, 57, 43, 0.08); }
+td.note-due-overdue .note-due-rel { color: var(--danger, #c1392b); font-weight: 600; }
+td.note-due-today   .note-due-rel { color: var(--warning); font-weight: 600; }
+td.note-due-soon    .note-due-rel { color: var(--warning); }
+td.note-due-future  .note-due-rel { color: var(--fg-muted); }
+td.note-due-none    .note-due-rel { color: var(--fg-muted); opacity: 0.7; }
+
+/* Tag chips rendered alongside the comma-separated tags input. Click
+   to filter by that tag (mirrors the tag-row chip behaviour). */
+.note-tag-chips {
+  display: flex; flex-wrap: wrap; gap: 3px;
+  margin-top: 4px;
+}
+.note-tag-chip-small {
+  font: inherit; font-size: 10.5px; font-weight: 500;
+  padding: 1px 6px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  background: transparent; color: var(--fg-muted);
+  cursor: pointer;
+}
+.note-tag-chip-small:hover { color: var(--fg); border-color: var(--fg); }
+
+/* Issue link in cross-issue mode — clickable to switch the modal
+   back to single-issue view scoped to that issue. */
+.note-issue-link {
+  font: inherit; font-size: 12px; font-weight: 600;
+  background: transparent; color: var(--accent);
+  border: 0; padding: 2px 4px;
+  cursor: pointer;
+}
+.note-issue-link:hover { text-decoration: underline; }
+
+/* Drag-and-drop visual state — only meaningful with the "manual"
+   sort mode. The dragging row dims while a drop target gets a thick
+   top border so the user can see where the row will land. */
+.notes-table-manual .note-row { cursor: grab; }
+.notes-table-manual .note-row.note-row-dragging { opacity: 0.4; }
+.notes-table-manual .note-row.note-row-drop-target {
+  box-shadow: 0 -2px 0 0 var(--accent) inset;
+}
+/* Inline editable note text. Reads as plain text by default; gets a
+   subtle border+background only when focused so it's clear the cell
+   is editable without making the whole table look like a form. */
+.note-content-edit {
+  white-space: pre-wrap; word-wrap: break-word;
+  min-height: 1.4em; padding: 2px 4px; border-radius: 3px;
+  border: 1px solid transparent;
+  cursor: text;
+}
+.note-content-edit:hover { background: var(--panel-2); }
+.note-content-edit:focus {
+  background: var(--bg);
+  border-color: var(--border-2);
+  outline: none;
+}
+.notes-actions-cell { white-space: nowrap; text-align: right; }
+.notes-actions-cell .btn { padding: 2px 7px; margin-left: 0.2rem; }
+/* Inline-edit rows: Save / Cancel stack vertically inside the actions
+   column so both buttons fit cleanly without overflowing. */
+.notes-actions-cell.notes-actions-stacked {
+  display: flex; flex-direction: column;
+  gap: 4px; align-items: stretch;
+}
+.notes-actions-cell.notes-actions-stacked .btn {
+  margin-left: 0; padding: 4px 10px;
+  text-align: center;
+}
+
+/* Status pills inside the notes table + on the per-status filter chips. */
+.note-status-pill {
+  display: inline-block; padding: 1px 7px; border-radius: 999px;
+  font-size: 11px; font-weight: 600;
+}
+.note-status-pill.note-status-todo,
+.note-status-select.note-status-todo {
+  background: var(--tint-warning); color: var(--warning);
+}
+.note-status-pill.note-status-done,
+.note-status-select.note-status-done {
+  background: var(--tint-success); color: var(--success);
+}
+.note-status-pill.note-status-not_done,
+.note-status-select.note-status-not_done {
+  background: var(--border-2); color: var(--fg-muted);
+}
+
+/* Inline status selector — looks like a pill, behaves like a <select>
+   so one click flips status without entering full edit mode. */
+.note-status-select {
+  font: inherit; font-size: 11px; font-weight: 600;
+  padding: 1px 18px 1px 7px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background-color: var(--tint-warning);
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 9px) 7px, calc(100% - 5px) 7px;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+}
+.note-status-select:hover { filter: brightness(1.1); }
+.note-status-select:focus-visible { outline: 1px solid currentColor; }
+/* Filter-chip variants — re-uses the .log-chip skeleton in the event
+   modal so the chips line up visually with the existing kind chips. */
+.log-chip.note-chip-todo.on   { border-color: var(--warning); color: var(--warning); }
+.log-chip.note-chip-done.on   { border-color: var(--success); color: var(--success); }
+.log-chip.note-chip-not_done.on { border-color: var(--fg-muted); color: var(--fg-muted); }
+
+/* Inline edit controls inside a notes-table row. */
+.note-edit-textarea {
+  width: 100%; box-sizing: border-box;
+  font: inherit; font-size: 13px;
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border-2); border-radius: 4px;
+  padding: 4px 6px;
+}
+.note-edit-status {
+  font: inherit; font-size: 12px;
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border-2); border-radius: 4px;
+  padding: 2px 4px;
+}
+
+/* Add-note modal — small dialog with all the per-note fields plus
+   Save/Cancel. Override the backdrop's stretch so the modal sizes to
+   its content instead of taking the full viewport height. */
+#add-note-dialog { align-items: center; }
+.add-note-modal {
+  width: min(540px, 90vw);
+  align-self: center; height: auto;
+  display: flex; flex-direction: column;
+}
+/* 2-column grid for the small per-note fields (Status, Priority, Due,
+   Assignee, Tags) so the dialog stays compact. */
+.add-note-grid {
+  display: grid; grid-template-columns: 6em 1fr;
+  align-items: center; gap: 6px 8px;
+  margin: 0.4rem 0 0.6rem;
+}
+.add-note-grid > label { margin: 0; padding-top: 0; }
+.add-note-grid > select,
+.add-note-grid > input { font: inherit; font-size: 13px;
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border-2); border-radius: 4px;
+  padding: 4px 6px;
+}
+
+/* Empty-state card — shown when the dashboard has zero worktrees. */
+.empty-state-card {
+  background: var(--panel); border: 1px dashed var(--border);
+  border-radius: 8px; padding: 2rem;
+  text-align: center;
+  margin: 1rem auto; max-width: 540px;
+}
+.empty-state-icon { font-size: 36px; line-height: 1; margin-bottom: 0.5rem; }
+.empty-state-card h2 { margin: 0.5rem 0 0.4rem; font-size: 18px; }
+.empty-state-card p { margin: 0.4rem 0 1rem; color: var(--fg-muted); }
+.empty-state-actions {
+  display: flex; gap: 0.5rem; justify-content: center;
+}
+
+/* Help overlay — keyboard shortcuts + main features + doc links. */
+#help-overlay { align-items: center; }
+.help-modal {
+  /* Width + height fixed so switching tabs doesn't resize the dialog.
+     Both panes (Quick info / Claude workspace) live in the body; the
+     short Quick info pane just leaves the unused vertical space empty
+     instead of letting the modal collapse down to its content height.
+     Width is generous so the README's Layout / external-paths table
+     (Linux / macOS / Windows / Purpose) reads without wrapping. */
+  width: min(1280px, 96vw);
+  height: 86vh;
+  align-self: center;
+  display: flex; flex-direction: column;
+}
+.help-body {
+  padding: 1rem 1.2rem;
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+.help-body h3 {
+  margin: 1rem 0 0.4rem; font-size: 13px;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--fg-muted);
+}
+.help-body h3:first-child { margin-top: 0; }
+.help-body p, .help-body ul { margin: 0.4rem 0; }
+.help-body ul { padding-left: 1.2rem; }
+.help-body li { margin: 0.25rem 0; }
+.help-shortcuts {
+  border-collapse: collapse; width: 100%; margin: 0.2rem 0;
+}
+.help-shortcuts td { padding: 4px 8px; vertical-align: middle; }
+.help-shortcuts td.help-keys { width: 6em; text-align: right; }
+.help-body kbd {
+  display: inline-block; padding: 1px 6px;
+  font: inherit; font-family: "JetBrains Mono", monospace; font-size: 12px;
+  background: var(--panel-2); color: var(--fg);
+  border: 1px solid var(--border-2); border-radius: 3px;
+  box-shadow: 0 1px 0 var(--border-2);
+  margin-right: 2px;
+}
+
+/* Width is now declared on .help-modal directly (constant across
+   tabs), so the legacy :has() override is no longer needed. */
+
+/* Tab strip inside the help modal. Two tabs: Quick info / Claude
+   workspace. Visual style mirrors the profile-popover tabs. */
+.help-tabs {
+  display: flex; gap: 0;
+  padding: 0 1.2rem;
+  border-bottom: 1px solid var(--border-2);
+  background: var(--panel);
+}
+.help-tab-btn {
+  padding: 8px 14px;
+  background: transparent; border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-muted);
+  font: inherit; font-weight: 500;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.help-tab-btn:hover { color: var(--fg); }
+.help-tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.help-tab-pane[hidden] { display: none; }
+.help-docs-blurb { margin-bottom: 0.6rem; }
+
+/* Inline-rendered markdown (README / etc). Lives inside .help-body so
+   it inherits scroll + padding; these rules just style the markdown
+   block elements. */
+.md-rendered {
+  margin-top: 0.6rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border-2);
+}
+.md-rendered h1, .md-rendered h2, .md-rendered h3,
+.md-rendered h4, .md-rendered h5, .md-rendered h6 {
+  margin: 1rem 0 0.4rem;
+  text-transform: none; letter-spacing: 0;
+  color: var(--fg);
+}
+.md-rendered h1 { font-size: 1.4rem; }
+.md-rendered h2 {
+  font-size: 1.15rem;
+  border-bottom: 1px solid var(--border-2);
+  padding-bottom: 0.2rem;
+}
+.md-rendered h3 { font-size: 1rem; }
+.md-rendered h1:first-child, .md-rendered h2:first-child {
+  margin-top: 0;
+}
+.md-rendered p { margin: 0.5rem 0; line-height: 1.5; }
+.md-rendered ul, .md-rendered ol {
+  margin: 0.4rem 0; padding-left: 1.4rem;
+}
+.md-rendered li { margin: 0.2rem 0; line-height: 1.45; }
+.md-rendered a { color: var(--accent); text-decoration: none; }
+.md-rendered a:hover { text-decoration: underline; }
+.md-rendered code {
+  font-family: "JetBrains Mono", monospace; font-size: 0.9em;
+  background: var(--panel-2); color: var(--fg);
+  padding: 1px 5px; border-radius: 3px;
+  border: 1px solid var(--border-2);
+}
+.md-rendered pre.md-code {
+  background: var(--panel-2);
+  border: 1px solid var(--border-2);
+  border-radius: 4px;
+  padding: 0.7rem 0.9rem;
+  margin: 0.6rem 0;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+.md-rendered pre.md-code code {
+  background: transparent; border: 0; padding: 0;
+}
+.md-rendered .table-scroll-wrap {
+  overflow-x: auto;
+  margin: 0.6rem 0;
+}
+.md-rendered table.md-table {
+  border-collapse: collapse;
+  margin: 0;
+  width: 100%;
+  font-size: 0.9rem;
+}
+.md-rendered table.md-table th,
+.md-rendered table.md-table td {
+  border: 1px solid var(--border-2);
+  padding: 4px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.md-rendered table.md-table th {
+  background: var(--panel-2); font-weight: 600;
+}
+.md-rendered table.md-table tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--panel) 92%, var(--panel-2));
+}
+
+/* API tab — Routes table: first column (route path) should never wrap;
+   the purpose column takes the remaining width and wraps normally.
+   A horizontal-scroll wrapper handles pathological viewport widths. */
+.api-tab-pane .md-rendered {
+  overflow-x: auto;
+}
+.api-tab-pane table.md-table {
+  width: max-content;
+  min-width: 100%;
+}
+.api-tab-pane table.md-table th:first-child,
+.api-tab-pane table.md-table td:first-child {
+  white-space: nowrap;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.85rem;
+}
+.api-tab-pane table.md-table th:last-child,
+.api-tab-pane table.md-table td:last-child {
+  min-width: 320px;
+}
+
+/* Add-issue modal — same auto-height treatment. Form fields stack
+   vertically; per-repo result rows render inline in a small table
+   after submit. */
+#add-issue-dialog { align-items: center; }
+.add-issue-modal {
+  width: min(540px, 92vw);
+  align-self: center; height: auto;
+  display: flex; flex-direction: column;
+}
+.add-issue-body {
+  padding: 0.85rem 1rem;
+  display: flex; flex-direction: column; gap: 0.4rem;
+}
+.add-issue-label {
+  font-size: 11px; color: var(--fg-muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  font-weight: 600;
+}
+.add-issue-input {
+  font: inherit; font-size: 13px;
+  padding: 5px 8px; box-sizing: border-box;
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border-2); border-radius: 4px;
+}
+.add-issue-input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+.add-issue-help {
+  color: var(--fg-muted); font-size: 11px;
+  font-style: italic;
+}
+.add-issue-repos {
+  display: flex; gap: 1rem; padding: 0.2rem 0;
+}
+.add-issue-repo-row {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  font-size: 12.5px; cursor: pointer;
+}
+.add-issue-results {
+  margin-top: 0.4rem;
+  border: 1px solid var(--border-2); border-radius: 4px;
+  background: var(--panel-2); padding: 0.4rem;
+  font-size: 12px;
+}
+.add-issue-results:empty { display: none; }
+.add-issue-foot {
+  display: flex; justify-content: flex-end; gap: 0.4rem;
+  padding: 0.6rem 1rem; border-top: 1px solid var(--border-2);
+}
+.add-note-body {
+  padding: 0.75rem 1rem;
+  display: flex; flex-direction: column; gap: 0.4rem;
+}
+.add-note-label {
+  font-size: 11px; color: var(--fg-muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  font-weight: 600;
+}
+.add-note-foot {
+  display: flex; justify-content: flex-end; gap: 0.4rem;
+  padding: 0.6rem 1rem; border-top: 1px solid var(--border-2);
+}
+.btn.btn-primary {
+  background: var(--accent); color: #fff;
+  border-color: var(--accent);
+}
+.btn.btn-primary:hover { filter: brightness(1.05); }
+
+/* Agent message list (per-issue Messages sub-tab). Capped at roughly
+   10 rows with internal scroll so a long unread queue doesn't push
+   the rest of the issue tab off-screen. */
+/* Wrap is a scroll container so a long unread queue doesn't push the
+   rest of the issue tab off-screen; the table inside fills it. */
+.agent-message-table-wrap {
+  max-height: 22em; overflow-y: auto;
+  border: 1px solid var(--border-2); border-radius: 4px;
+}
+.agent-message-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 12px; table-layout: fixed;
+}
+.agent-message-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--panel-2); color: var(--fg-muted);
+  text-align: left; font-weight: 600; padding: 4px 8px;
+  border-bottom: 1px solid var(--border-2);
+}
+.agent-message-table tbody tr.agent-message-row {
+  border-left: 3px solid var(--accent);   /* unread marker */
+}
+.agent-message-table tbody td {
+  padding: 6px 8px; border-bottom: 1px solid var(--border-2);
+  vertical-align: top;
+}
+/* The kind cell needs a fixed width that fits the widest kind
+   ("USERPROMPTSUBMIT" = 16 uppercased chars, ~12em at 10.5px) so
+   neighbouring columns aren't pushed around. table-layout: fixed on
+   the parent table makes this width authoritative; overflow:hidden +
+   max-width on the pill make sure unforeseen-long kinds clip with
+   an ellipsis rather than bleed into the Message column. */
+.agent-message-table .agent-message-kind-cell {
+  width: 13em; max-width: 13em;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.agent-message-kind {
+  display: inline-block;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+  vertical-align: middle;
+  font-weight: 600; font-size: 10.5px; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--fg-muted);
+  padding: 1px 6px; border-radius: 3px; background: var(--panel-2);
+  text-align: center;
+}
+.agent-message-kind.kind-Notification { color: var(--warning); background: var(--tint-warning); }
+.agent-message-kind.kind-Stop         { color: var(--success); background: var(--tint-success); }
+.agent-message-kind.kind-UserPromptSubmit { color: var(--accent);
+                                            background: rgba(9,105,218,0.10); }
+.agent-message-table .agent-message-time {
+  width: 11em; white-space: nowrap;
+  color: var(--fg-muted); font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.agent-message-table .agent-message-body {
+  color: var(--fg); word-break: break-word;
+}
+
+/* All-events modal */
+.all-events-filters {
+  display: flex; flex-wrap: wrap; gap: 0.4rem;
+  padding: 0.5rem 0.8rem;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border-2);
+}
+/* The 🔔 Agent events modal already has its own scroll container
+   inside the modal shell, so the events table just gets a sticky
+   header to keep column labels in view as the user scrolls. */
+#all-events-body .all-events-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--panel-2);
+}
+.all-events-table { table-layout: fixed; }
+/* Time: "5/8/2026, 4:13:00 PM" ~ 18ch incl. comma + AM/PM. */
+.all-events-table th:nth-child(1), .all-events-table td:nth-child(1) { width: 12em; }
+/* Kind chip: longest is "USERPROMPTSUBMIT" (16 chars) — need ≥14em with
+   the uppercase + letter-spacing + chip padding to avoid clipping. */
+.all-events-table th:nth-child(2), .all-events-table td:nth-child(2) { width: 14em; }
+/* Issue: "man-remove_maven_formatter" is the widest local issue id we
+   currently produce — 26 chars; 16em prevents that from wrapping. */
+.all-events-table th:nth-child(3), .all-events-table td:nth-child(3) { width: 16em; }
+.all-events-table .agent-message-kind {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: inline-block; max-width: 100%;
+}
+.all-events-table td.event-message {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.all-events-table tr.event-unread td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.all-events-table tr.event-read   { opacity: 0.78; }
+.event-issue-link { color: var(--accent); text-decoration: none; }
+.event-issue-link:hover { text-decoration: underline; }
+/* The 5th column hosts the inline ✓ "mark this row read" button. */
+.all-events-table th:nth-child(5), .all-events-table td:nth-child(5) {
+  width: 5.5em; text-align: center; white-space: nowrap;
+}
+.event-mark-read-btn,
+.event-delete-btn {
+  padding: 0 6px; font-size: 12px; min-width: 1.6em;
+}
+/* Mark-as-read + Delete sit side-by-side in the actions cell. */
+.event-actions-cell {
+  white-space: nowrap; text-align: center;
+  display: flex; gap: 4px; justify-content: center; align-items: center;
+}
+/* Vertical separator inside the filter strip — makes date / issue /
+   kind groupings visually distinct without taking up much room. */
+.all-events-filter-divider {
+  display: inline-block; width: 1px; align-self: stretch;
+  background: var(--border-2); margin: 0 0.2rem;
+}
+.all-events-issue-pick {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font-size: 12px;
+}
+.all-events-issue-pick select {
+  font: inherit; font-size: 12px;
+  padding: 1px 4px;
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border-2); border-radius: 3px;
+}
+
+.agent-body { padding: 0.6rem 0.8rem 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.agent-row { display: flex; align-items: baseline; gap: 0.6rem; font-size: 12px; }
+.agent-row-block { flex-direction: column; align-items: stretch; gap: 0.35rem; }
+.agent-row-prompt { flex-direction: column; align-items: stretch; gap: 0.25rem; }
+.agent-label { color: var(--fg-muted); font-size: 11px;
+               text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+               flex: 0 0 auto; }
+.agent-value { color: var(--fg); }
+.agent-value.agent-warn { color: var(--warning); font-weight: 600; }
+.agent-prompt {
+  background: var(--bg); border: 1px solid var(--border-2); border-radius: 4px;
+  padding: 0.4rem 0.55rem; font-family: "JetBrains Mono", monospace; font-size: 11px;
+  /* ~10 lines tall to match the 10-row commit-list tables. */
+  white-space: pre-wrap; max-height: 16em; overflow: auto; color: var(--fg);
+}
+
+.agent-toolbar {
+  display: flex; height: 12px; border-radius: 3px; overflow: hidden;
+  background: var(--border-2);
+}
+.agent-toolseg { display: block; height: 100%; }
+.agent-toollabels { display: flex; flex-wrap: wrap; gap: 0.4rem 0.7rem; font-size: 11px; color: var(--fg-muted); }
+.agent-toolchip { display: inline-flex; align-items: center; gap: 0.3rem; }
+.agent-toolswatch { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+
+.filter-chips { display: inline-flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.filter-chips .filter-label { color: var(--fg-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 0.2rem; }
+.filter-chips .chip {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 2px 0.6rem; border-radius: 999px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--fg-muted); font-size: 11px;
+  cursor: pointer; user-select: none;
+}
+.filter-chips .chip:hover { color: var(--fg); border-color: var(--accent); }
+.filter-chips .chip.on { color: var(--accent); border-color: var(--accent); background: var(--panel-2); font-weight: 600; }
+.filter-chips .chip-cb { display: none; }
+
+/* Co-authors and disk usage in the details pane */
+ul.coauthors { list-style: none; padding: 0; margin: 0.4rem 0 0; }
+ul.coauthors li { padding: 3px 0; font-size: 12px; color: var(--fg); }
+ul.coauthors li strong { display: inline-block; width: 3ch; color: var(--accent); margin-right: 0.4rem; text-align: right; font-variant-numeric: tabular-nums; }
+/* Disk-usage chip in the card title bar — small monospace, muted. */
+summary.repo-summary > .repo-head .disk-badge {
+  font-family: "JetBrains Mono", monospace; font-size: 11px;
+  color: var(--fg-muted); padding: 1px 6px;
+  border: 1px solid var(--border-2); border-radius: 4px;
+  background: var(--bg);
+}
+/* Icon-only button (e.g. "open in editor" next to the worktree path). */
+.btn-icon {
+  background: var(--bg); color: var(--fg-muted);
+  border: 1px solid var(--border-2); border-radius: 4px;
+  padding: 0; width: 22px; height: 22px;
+  font: inherit; font-size: 12px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.btn-icon:hover { color: var(--accent); border-color: var(--accent);
+                  background: var(--panel-2); }
+.btn-icon.open-in-editor { font-size: 13px; }
+
+/* Toast host — fixed-position container at the top of the viewport so
+   ephemeral status messages ("✓ opened in code", "Sync failed") overlay
+   the page instead of pushing layout in the toolbar. */
+#toast-host {
+  position: fixed; top: 0.6rem; left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: 0.3rem;
+}
+#toast-host .toast {
+  pointer-events: auto;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  padding: 7px 22px; font-size: 12.5px;
+  min-width: 22rem;
+  justify-content: center;
+  text-align: center;
+}
+/* Dedicated host for agent banners — kept separate from #toast-host
+   because that host uses a CSS transform, which would re-anchor any
+   position:fixed child to the host instead of the viewport. This host
+   is positioned to match the body's content box: left:2rem matches
+   the body's left padding, the max-width caps at body's content area
+   (1400px − 2 × 2rem padding). */
+#agent-toast-host {
+  position: fixed;
+  top: 0.6rem;
+  left: 2rem;
+  width: calc(100vw - 4rem);
+  max-width: 1336px;
+  z-index: 1000;
+  pointer-events: none;
+  display: flex; flex-direction: column; gap: 0.3rem;
+}
+#agent-toast-host .toast.toast-agent {
+  pointer-events: auto;
+  display: block; text-align: left;
+  cursor: pointer;
+  padding: 0.8rem 1.2rem;
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--fg);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  opacity: 1; transition: opacity 400ms ease-in-out;
+}
+#agent-toast-host .toast.toast-agent.fade { opacity: 0; }
+#agent-toast-host .toast.toast-agent:hover { background: var(--panel-2); }
+#toast-host .toast.toast-agent:hover {
+  background: var(--panel-2);
+}
+.toast-agent-head {
+  display: flex; align-items: baseline; gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.toast-agent-icon { font-size: 14px; }
+.toast-agent-kind {
+  margin-left: auto;
+  font-size: 10.5px; color: var(--fg-muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+/* ✕ dismiss button on the agent-notification banner. Marks the event
+   as read on the server then removes the toast. */
+.toast-agent-dismiss {
+  margin-left: 0.5rem;
+  background: transparent; color: var(--fg-muted);
+  border: 1px solid var(--border-2); border-radius: 4px;
+  padding: 1px 8px; font-size: 13px; line-height: 1.2;
+  cursor: pointer;
+}
+.toast-agent-dismiss:hover {
+  color: var(--danger); border-color: var(--danger);
+  background: var(--tint-danger);
+}
+.toast-agent-body {
+  font-size: 12.5px; color: var(--fg);
+  white-space: pre-wrap; word-wrap: break-word;
+}
+
+/* Git-op result banner — multi-line, monospaced body so the verbatim
+   git stdout/stderr is readable. Tint border + icon by ok/error. */
+#agent-toast-host .toast.toast-git-ok    { border-color: var(--success); }
+#agent-toast-host .toast.toast-git-error { border-color: var(--danger); }
+#agent-toast-host .toast.toast-git-ok    .toast-agent-icon { color: var(--success); }
+#agent-toast-host .toast.toast-git-error .toast-agent-icon { color: var(--danger); }
+.toast-git-body {
+  margin: 0.4rem 0 0; padding: 0.4rem 0.6rem;
+  font-family: "JetBrains Mono", monospace; font-size: 12px;
+  color: var(--fg);
+  background: var(--panel-2); border-radius: 4px;
+  white-space: pre-wrap; word-wrap: break-word;
+  max-height: 50vh; overflow: auto;
+}
+.btn {
+  background: var(--panel); color: var(--fg); border: 1px solid var(--border);
+  padding: 4px 10px; border-radius: 4px; font: inherit; font-size: 12px;
+  cursor: pointer;
+}
+.btn:hover { background: var(--panel-2); border-color: var(--accent); color: var(--accent); }
+.btn:disabled, .btn.is-disabled {
+  opacity: 0.5; cursor: not-allowed; color: var(--fg);
+  background: var(--panel); border-color: var(--border);
+}
+.btn:disabled:hover, .btn.is-disabled:hover {
+  color: var(--fg); background: var(--panel); border-color: var(--border);
+}
+
+/* ── Summary stats ─────────────────────────────────────────────── */
+.summary {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(153px, 1fr));
+  gap: 0.5rem; margin-bottom: 0.4rem;
+}
+.stat {
+  background: var(--panel); border: 1px solid var(--border-2);
+  border-radius: 6px; padding: 0.6rem 0.7rem;
+}
+.stat .label { color: var(--fg-muted); font-size: 9px;
+               text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+.stat .value { font-size: 1.5rem; font-weight: 600; line-height: 1.2;
+               color: var(--fg-strong); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.stat.warn { border-color: var(--warning); background: linear-gradient(var(--tint-warning), var(--tint-warning)) var(--panel); }
+.stat.warn .value { color: var(--warning); }
+.stat.danger { border-color: var(--danger); background: linear-gradient(var(--tint-danger), var(--tint-danger)) var(--panel); }
+.stat.danger .value { color: var(--danger); }
+.stat.ok .value { color: var(--success); }
+/* Optional inline annotation next to a stat's big number — e.g.
+   AGENTS shows "5 (2 idle)" at the same size as the headline figure
+   so both numbers read with equal weight; only the colour is muted. */
+.stat-sub { color: var(--fg-muted); font-size: inherit; font-weight: 600;
+            margin-left: 0.4rem; }
+
+/* AGENTS card hover-tooltip — uses the shared .hover-popover skeleton
+   above. Clickable rows activate that issue's tab on click; matching
+   the look across every styled tooltip on the dashboard. */
+.hover-popover-row { cursor: pointer; }
+.hover-popover-row:hover td,
+.hover-popover-row:focus-visible td { background: var(--panel-2); }
+.hover-popover-row:focus-visible { outline: none; }
+.hover-popover-table td.muted { color: var(--fg-muted); padding: 0.6rem 0.8rem; }
+
+/* Status pill colours — re-uses the dashboard's tint-success /
+   tint-warning / tint-danger ramp so a glance picks out the closed
+   row instantly. */
+.agent-state-pill {
+  display: inline-block; padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px; font-weight: 600;
+  text-transform: lowercase;
+}
+.agent-state-pill.agent-state-active {
+  background: var(--tint-success); color: var(--success);
+}
+.agent-state-pill.agent-state-idle {
+  background: var(--tint-warning); color: var(--warning);
+}
+.agent-state-pill.agent-state-closed {
+  background: var(--tint-danger); color: var(--danger);
+}
+.agent-state-pill.agent-state-unknown {
+  background: var(--border-2); color: var(--fg-muted);
+}
+
+/* ── Banner ────────────────────────────────────────────────────── */
+.banner {
+  background: var(--tint-danger); color: var(--fg);
+  padding: 0.85rem 1rem; border-radius: 6px; margin-bottom: 1rem;
+  border: 1px solid var(--danger); border-left-width: 4px;
+}
+.banner strong { color: var(--danger); }
+.banner ul { margin: 0.5rem 0 0; padding-left: 1.4rem; font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--fg-muted); }
+.banner li { margin: 2px 0; }
+.banner-dismiss {
+  background: transparent; border: none; color: var(--fg-muted);
+  cursor: pointer; padding: 0 4px; font-size: 11px; line-height: 1;
+  border-radius: 3px;
+}
+.banner-dismiss:hover { background: var(--border-2); color: var(--fg); }
+.banner.banner-warn {
+  background: var(--tint-warning); border-color: var(--warning);
+}
+.banner.banner-warn strong { color: var(--warning); }
+
+/* Missing-primary-repos banner layout. Buttons sit on their own
+   row so the (potentially) wide Clone-all + per-repo buttons don't
+   overflow the banner. */
+.missing-primaries .missing-primaries-head { margin-bottom: 0.5rem; }
+.missing-primaries .missing-primaries-rows {
+  display: flex; flex-wrap: wrap; gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+.missing-primaries .missing-primaries-foot {
+  display: flex; flex-wrap: wrap; gap: 0.4rem;
+}
+
+/* Clone button that doubles as a live progress bar. When in flight
+   we paint a green-tinted fill from the left up to --clone-pct,
+   so the user sees percent at a glance without crowding the label. */
+.primaries-clone-btn {
+  margin-left: 0;
+  min-width: 11em;
+  position: relative;
+  /* Solid background while idle; .cloning swaps it out. */
+}
+.primaries-clone-btn.cloning {
+  /* `--clone-pct` is set inline from JS as e.g. "45%". The gradient
+     is hard-edged (no anti-aliased blur) so the fill reads as a
+     proper bar, and tinted with the same success/orange tokens the
+     dashboard already uses elsewhere so it slots into the theme. */
+  background: linear-gradient(to right,
+    var(--tint-success) 0%,
+    var(--tint-success) var(--clone-pct, 0%),
+    var(--panel-2)      var(--clone-pct, 0%),
+    var(--panel-2)      100%);
+  border-color: var(--success);
+  color: var(--fg);
+  cursor: progress;
+}
+.btn.btn-inline { padding: 2px 8px; font-size: 11px; margin-left: 0.4rem; }
+.btn.btn-inline.on {
+  background: var(--tint-success); border-color: var(--success); color: var(--success);
+}
+.btn.auto-sync-toggle.on {
+  color: var(--success); border-color: var(--success);
+  background: var(--tint-success);
+}
+.btn.auto-sync-toggle.on:hover { color: var(--success); border-color: var(--success); }
+.btn.auto-sync-toggle:disabled { opacity: 0.5; cursor: not-allowed; }
+.meta .sync-stale { color: var(--warning); font-weight: 600; }
+
+/* ── Tabs ──────────────────────────────────────────────────────── */
+/* Single-row scrollable tab strip. ◀/▶ arrows are grouped on the right
+   end and only visible when the strip overflows
+   (.tabs-wrap.overflowing toggled by setupTabsScroll). Scrollbar is
+   hidden — arrows are the canonical control. The 1px divider under the
+   strip merges with the active tab's bottom edge so the tab visually
+   connects to the content. */
+.tabs-wrap {
+  display: flex; align-items: stretch; gap: 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0;
+}
+.tabs-scroll-btns {
+  display: none;     /* shown by .tabs-wrap.overflowing */
+  flex: 0 0 auto;
+  align-items: stretch;
+  margin-left: 0.4rem;
+  gap: 0;
+}
+.tabs-wrap.overflowing .tabs-scroll-btns { display: inline-flex; }
+.tabs-scroll-btn {
+  flex: 0 0 auto;
+  background: var(--panel); color: var(--fg-muted);
+  border: 1px solid var(--border); border-bottom: none;
+  padding: 0 10px; cursor: pointer;
+  font: inherit; font-size: 13px;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background 80ms, color 80ms, border-color 80ms;
+}
+.tabs-scroll-btn.left  { border-radius: 6px 0 0 0; border-right-width: 0; }
+.tabs-scroll-btn.right { border-radius: 0 6px 0 0; }
+.tabs-scroll-btn:hover { color: var(--accent); border-color: var(--accent);
+                         background: var(--panel-2); }
+.tabs-scroll-btn:disabled { color: var(--border-2); cursor: default;
+                            background: var(--panel); border-color: var(--border); }
+.tabs-scroll-btn:disabled:hover { color: var(--border-2);
+                                   border-color: var(--border); background: var(--panel); }
+
+nav.tabs {
+  flex: 1; min-width: 0;
+  display: flex; flex-wrap: nowrap; gap: 4px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  /* Hide the scrollbar — arrows are the only visible control. The
+     scrollable area still works for trackpad swipe / keyboard / programmatic
+     scrollIntoView calls, but no scrollbar gutter eats vertical space. */
+  scrollbar-width: none;             /* Firefox */
+  -ms-overflow-style: none;          /* IE */
+}
+nav.tabs::-webkit-scrollbar { display: none; }   /* Chromium, Safari */
+
+nav.tabs button {
+  flex: 0 0 auto;        /* never shrink — overflow goes to scroll */
+  background: var(--panel-2); color: var(--fg);
+  border: 1px solid var(--border); border-bottom: none;
+  padding: 0.55rem 1.05rem; cursor: pointer;
+  border-radius: 6px 6px 0 0; font: inherit; font-size: 15px;
+  margin-bottom: -1px;    /* overlap divider so active tab can punch through */
+  transition: background 80ms ease, color 80ms ease, border-color 80ms ease;
+}
+nav.tabs button:hover {
+  color: var(--fg-strong);
+  background: var(--panel);
+  border-color: var(--accent);
+}
+/* Active tab uses the page background and a transparent bottom edge so
+   it visually flows into the content pane below — no gap, no blue rule. */
+nav.tabs button.active {
+  background: var(--bg); color: var(--fg-strong);
+  border-color: var(--border); border-bottom-color: var(--bg);
+  font-weight: 600;
+}
+section.tab.active { padding-top: 0.6rem; }
+nav.tabs button .badge {
+  display: inline-block; min-width: 1.4em; padding: 0 0.45em; margin-left: 0.4em;
+  background: var(--border-2); color: var(--fg-muted);
+  border-radius: 999px; font-size: 11px; text-align: center; font-weight: 500;
+}
+nav.tabs button.has-warn .badge { background: var(--tint-danger); color: var(--danger); }
+/* Per-repo gitweb shortlog link, rendered in each .repo-head right
+   after the branch name. Same look as the old tab-level .tab-gitweb
+   so the visual language is consistent. */
+.repo-head .branch-gitweb {
+  color: var(--accent); text-decoration: none;
+  font-size: 12px; opacity: 0.7;
+  margin-left: 0.15em;
+  padding: 0 4px;
+  display: inline-flex; align-items: center;
+}
+.repo-head .branch-gitweb:hover { opacity: 1; text-decoration: underline; }
+
+section.tab { display: none; }
+section.tab.active {
+  display: flex; flex-direction: column;
+  flex: 1 1 auto; min-height: 0;
+}
+
+/* ── Repo cards (foldable via <details>) ───────────────────────── */
+details.repo-card {
+  background: var(--panel); border: 1px solid var(--border-2);
+  border-radius: 6px; padding: 0; margin-bottom: 0.7rem; overflow: hidden;
+}
+details.repo-card.too-behind { border-color: var(--danger); }
+details.repo-card.ghost { opacity: 0.65; border-style: dashed; }
+details.repo-card.ghost:hover { opacity: 0.9; }
+.pill.ghost-pill { background: var(--border-2); color: var(--fg-muted); font-style: italic; }
+/* The repo card's <summary> wraps two stacked rows: the title-bar row and
+   the footer row. Both stay visible when the card is collapsed. */
+details.repo-card        > summary.repo-summary { list-style: none; cursor: pointer; user-select: none; padding: 0; text-decoration: none; }
+details.repo-card        > summary.repo-summary::-webkit-details-marker { display: none; }
+details.repo-card[open]  > summary.repo-summary > .repo-head { border-bottom: 1px solid var(--border-2); }
+details.repo-card        > :not(summary) { padding-left: 1.4rem; padding-right: 1.4rem; }
+details.repo-card        > :not(summary):first-of-type { padding-top: 1.05rem; }
+details.repo-card        > :last-child { padding-bottom: 1.05rem; }
+
+/* Title-bar row inside the summary. ~25 % roomier than before so the
+   row reads more easily at a glance — bigger title font, a touch more
+   padding, slightly larger expand marker. */
+summary.repo-summary > .repo-head {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 0.85rem; padding: 1.05rem 1.4rem;
+  text-decoration: none;
+}
+/* Float the pills + action cluster (.pills, ↗ Open, git ops, disk
+   badge) to the right end of the title bar. margin-left: auto on
+   the pills consumes the free space between the repo title and the
+   right cluster so the tags sit flush against the Open button. */
+summary.repo-summary > .repo-head .pills-rightcluster {
+  /* placeholder reserved for future grouping needs */
+}
+/* The flex `gap: 0.85rem` separates every item in .repo-head; halve
+   the visual gap specifically between ↗ Open and the .git-ops cluster
+   that immediately follows it so the right cluster reads as one
+   tighter group. Negative margin trims the gap without touching the
+   gap rule itself (which is still needed for the title / pills). */
+summary.repo-summary > .repo-head .git-ops {
+  margin-left: calc(-0.85rem / 2);
+}
+summary.repo-summary > .repo-head::before {
+  content: '+'; color: var(--fg-muted);
+  font-size: 20px; font-weight: 400; line-height: 1;
+  width: auto; min-width: 0; text-align: center;
+  display: inline-block; vertical-align: middle;
+  margin-right: -0.35rem;  /* trim the .repo-head flex gap so the marker hugs */
+}
+details.repo-card[open]    > summary.repo-summary > .repo-head::before { content: '−'; color: var(--accent); }
+summary.repo-summary:hover > .repo-head::before { color: var(--accent); }
+summary.repo-summary:hover > .repo-head { background: var(--panel-2); }
+/* Repo title: match the Claude-agent title in weight + size + colour so
+   the two card headers read as a pair. The .section-icon glyph (🌿)
+   sits in the same position as 🤖 on the agent card. */
+summary.repo-summary > .repo-head h3 {
+  color: var(--accent); text-decoration: none;
+  font-size: 16px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 0.45rem;
+}
+summary.repo-summary > .repo-head h3 .section-icon { font-size: 16px; }
+.agent-title { display: inline-flex; align-items: center; gap: 0.45rem; }
+details.agent-details > summary.agent-summary .agent-title {
+  font-size: 15px; font-weight: 600; color: var(--accent);
+}
+summary.repo-summary > .repo-head .branch {
+  color: var(--fg-muted); font-family: "JetBrains Mono", monospace;
+  font-size: 13px;
+}
+/* Inline sync indicator next to the repo name in the title — VS Code
+   bottom-bar shape (↓N ↑N) but rendered in the title's accent colour
+   so it reads as one chunk with the repo name. */
+.repo-label { display: inline-flex; align-items: baseline; gap: 0; }
+.repo-sync-counts {
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.repo-dirty-mark { color: inherit; font-weight: 700; }
+
+/* Generic styled hover popover — same look as the AGENTS card hover
+   table and the agent-events table. The host element gets
+   `position: relative` + `cursor: help`; the popover element is a
+   `<div class="hover-popover">` placed inside the host. The popover
+   shows on :hover or :focus-within of the host. */
+.hover-popover-host,
+.tab-info-host { position: relative; }
+/* No cursor override on the hosts — they keep their natural cursor
+   (default text in a heading, pointer on the tab button) so hovering
+   never flips to "?". */
+
+/* Small ⓘ icon inside each tab button. The icon is the only target
+   that opens the per-issue hover popover — hovering anywhere else on
+   the tab leaves the strip quiet so quick "switch tab" clicks don't
+   summon the tooltip. */
+nav.tabs button .tab-info-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-left: 0.4em;
+  width: 1.1em; height: 1.1em;
+  font-size: 12px; line-height: 1;
+  color: var(--fg-muted);
+  border-radius: 999px;
+  transition: color 80ms ease, background 80ms ease;
+}
+nav.tabs button .tab-info-icon:hover,
+nav.tabs button .tab-info-icon:focus-visible {
+  color: var(--accent); background: var(--panel-2);
+  outline: none;
+}
+.hover-popover {
+  /* Always rendered (so JS can measure it on mouseover) but invisible
+     and click-through until the host has been hovered long enough to
+     trigger the fade-in. position: fixed escapes overflow:hidden
+     ancestors. */
+  position: fixed;
+  top: 0; left: 0;
+  z-index: 1000;
+  opacity: 0; pointer-events: none;
+  background: var(--panel); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  padding: 0; min-width: 22rem; max-width: 36rem;
+  /* Cap the popover height so a stat card with dozens of issues / repos
+     stays scannable instead of stretching past the viewport. The
+     stat-card tables (ISSUES, REPO CHECKOUTS, AGENTS, etc.) scroll
+     internally past ~10 rows. */
+  max-height: 60vh; overflow-y: auto;
+  text-align: left; font-weight: 400;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               Helvetica, Arial, sans-serif;
+  /* Fade-out is fast (80ms, no delay) so leaving the host feels
+     responsive. Fade-in delay is set on :hover below. */
+  transition: opacity 80ms ease;
+}
+/* Keep the header row visible when the table scrolls. */
+.hover-popover .hover-popover-table thead th {
+  position: sticky; top: 0;
+  background: var(--panel);
+  z-index: 1;
+}
+.hover-popover-host:hover > .hover-popover,
+.tab-info-host:hover > .hover-popover {
+  opacity: 1; pointer-events: auto;
+  /* 500 ms hover before the popover appears — short clicks like
+     "switch tab" don't trigger the tooltip. We deliberately do NOT
+     show on :focus-within: when you click an action button (e.g.
+     "🔔 Agent events") it receives focus, and :focus-within would
+     then keep popping the tooltip even though the user just wanted
+     to open the modal. */
+  transition: opacity 120ms ease 500ms;
+}
+
+/* Touch / no-hover devices (phones, most tablets) can't trigger
+   :hover, so the .hover-popover would never appear. Hide it
+   completely there and rely on the host's own native title=
+   attribute (which mobile browsers expose via long-press) for the
+   information that was in the popover. JS already mirrors the
+   table-style popovers' header text into title= when relevant; for
+   the simpler `<div class="hover-popover-foot">` popovers the
+   surrounding element typically already has its own title=. */
+@media (hover: none) {
+  .hover-popover { display: none !important; }
+  .hover-popover-host, .tab-info-host { cursor: default; }
+}
+.hover-popover-table {
+  border-collapse: collapse; width: 100%; font-size: 12px;
+}
+/* Issues hover-popover table widens to accommodate the Summary
+   column; that column ellipsises long summaries and keeps its
+   tooltip via title= for the full text. */
+.hover-popover-table.issues-popover-table { min-width: 32rem; }
+.hover-popover-table.issues-popover-table .issues-popover-summary {
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+}
+.hover-popover-table.issues-popover-table .issues-popover-summary.muted {
+  color: var(--fg-muted); font-style: italic;
+}
+.hover-popover-table th,
+.hover-popover-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border-2);
+  text-align: left; vertical-align: middle;
+}
+.hover-popover-table tr:last-child > th,
+.hover-popover-table tr:last-child > td { border-bottom: none; }
+.hover-popover-table thead th {
+  background: var(--panel-2);
+  color: var(--fg-muted);
+  font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.08em; font-weight: 600;
+}
+.hover-popover-table .num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.hover-popover-table.hover-popover-kv th {
+  color: var(--fg-muted); font-weight: 600;
+  font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.04em;
+  width: 9em; white-space: nowrap;
+  background: var(--panel-2);
+}
+.hover-popover-foot {
+  padding: 6px 10px; font-size: 12px;
+  color: var(--fg-muted); font-style: italic;
+  border-top: 1px solid var(--border-2);
+}
+/* Standalone-text variant — no border-top, used when the popover is
+   just a single line of help text rather than a table footer. */
+.hover-popover > .hover-popover-foot:only-child {
+  border-top: none; padding: 8px 12px;
+  font-size: 12.5px;
+}
+/* Multi-line list variant — used for "subjects" / "comments" blocks
+   that previously joined items with \n in a native title=. */
+.hover-popover-list { padding: 6px 10px; font-size: 12.5px; }
+.hover-popover-list-item {
+  padding: 2px 0;
+  border-bottom: 1px dashed var(--border-2);
+}
+.hover-popover-list-item:last-child { border-bottom: none; }
+
+/* Compact "git ops" cluster — fetch / pull / push. Sits next to the
+   open-in-editor ↗ button; same icon-button shape so the row stays
+   consistent. Disabled state is greyed out + non-clickable. */
+.git-ops {
+  display: inline-flex; align-items: center; gap: 2px;
+  margin-left: 0.2rem;
+}
+.git-op-btn {
+  font-size: 13px; line-height: 1;
+  padding: 2px 6px;
+}
+.git-op-btn[disabled],
+.git-op-btn.git-op-disabled {
+  /* Avoid `opacity` so the styled hover-popover child stays at full
+     visibility when the user hovers a disabled button. */
+  cursor: not-allowed;
+  background: var(--panel-2);
+  color: var(--fg-muted);
+  border-color: var(--border-2);
+}
+.git-op-btn.git-op-running {
+  opacity: 0.6; pointer-events: none;
+}
+summary.repo-summary > .repo-head .wt-path {
+  color: var(--fg-muted); font-family: "JetBrains Mono", monospace;
+  font-size: 11px; opacity: 0.65;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 38ch;
+}
+summary.repo-summary:hover > .repo-head .wt-path { opacity: 1; }
+/* .pills carries the auto margin so the whole right-side group
+   (tags → ↗ Open → git ops → disk) packs flush against the right
+   edge of the title bar, with the tags sitting just left of the
+   Open button. */
+summary.repo-summary > .repo-head .pills {
+  margin-left: auto;
+  display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+}
+
+/* Every clickable / chip element in the repo head right cluster gets
+   a common 26px min-height + flex centring so the row reads as a
+   single horizontal strip — the pills, the Open button, the git-op
+   icon buttons and the disk badge all line up regardless of their
+   individual font-size / padding overrides. */
+summary.repo-summary > .repo-head .pill,
+summary.repo-summary > .repo-head .open-worktree-btn,
+summary.repo-summary > .repo-head .git-op-btn,
+summary.repo-summary > .repo-head .disk-badge {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+/* Footer row inside the summary — always visible. */
+summary.repo-summary > .footer {
+  margin-top: 0; padding: 0.45rem 1.1rem 0.55rem;
+  border-top: none;
+}
+details.repo-card[open] > summary.repo-summary > .footer { border-bottom: 1px solid var(--border-2); }
+
+.pill {
+  display: inline-block; padding: 0 0.55rem;
+  border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 1.7;
+  vertical-align: middle;
+}
+.pill.clean    { background: var(--tint-success); color: var(--success); }
+.pill.dirty    { background: var(--tint-warning); color: var(--warning); }
+.pill.unpushed { background: var(--tint-danger);  color: var(--danger); }
+.pill.behind   { background: var(--border-2);     color: var(--fg-muted); }
+.pill.behindbad{ background: var(--tint-danger);  color: var(--danger); }
+.pill.ahead    { background: var(--border-2);     color: var(--accent); }
+/* Branch with zero commits ahead of base — work hasn't started yet.
+   Same red palette as the UNPUSHED COMMITS stat card so it stands out. */
+.pill.not-started {
+  background: var(--tint-danger); color: var(--danger);
+  font-weight: 600;
+}
+
+/* Missing-repo placeholder — flat row that signals "this expected
+   repo (core / bssweb / doc) isn't materialised under this issue".
+   Background is intentionally darker than the live-repo cards so a
+   missing row reads at a glance even amid a long list of repos. */
+.repo-card.repo-missing {
+  border: 1px dashed var(--warning);
+  border-radius: 6px;
+  background: var(--tint-warning);
+  padding: 1.05rem 1.4rem;     /* match summary.repo-head padding */
+  margin-bottom: 0.7rem;
+}
+.repo-card.repo-missing > .repo-head {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 0.7rem;
+}
+/* Decorative '+' marker so the missing card's left edge aligns with
+   the live cards' expand/collapse marker. Inert — no click handler,
+   styled muted so it doesn't suggest interactivity. */
+.repo-card.repo-missing > .repo-head::before {
+  content: '+'; color: var(--fg-muted);
+  font-size: 16px; font-weight: 400; line-height: 1;
+  display: inline-block; vertical-align: middle;
+  margin-right: -0.35rem;
+  opacity: 0.5; cursor: default;
+}
+.repo-card.repo-missing .repo-title {
+  color: var(--fg-muted);
+  text-decoration: line-through dotted;
+  text-decoration-color: var(--border);
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  font-size: 13px; font-weight: 600;
+}
+.repo-card.repo-missing .repo-missing-text {
+  color: var(--fg-muted); font-style: italic;
+}
+/* Right-align the pills cluster, matching the live repo cards. */
+.repo-card.repo-missing > .repo-head .pills {
+  margin-left: auto;
+  display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+}
+.pill.missing-pill {
+  background: var(--panel); color: var(--warning);
+  border: 1px solid var(--warning);
+  font-weight: 600;
+}
+
+.lastline { margin: 0.85rem 0 0; font-size: 12px; }
+.lastline code { background: var(--panel-2); padding: 1px 6px; border-radius: 3px; border: 1px solid var(--border-2); }
+.lastline .muted { color: var(--fg-muted); }
+
+.repo-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.7rem; margin-top: 0.6rem;
+  align-items: stretch;
+}
+/* Each grid cell is a flex column so the value box always takes the
+   remaining height — fields then share a baseline regardless of content. */
+.repo-grid > div { display: flex; flex-direction: column; min-height: 0; }
+.repo-grid pre, .repo-grid code.path {
+  margin: 0; padding: 0.5rem 0.7rem;
+  background: var(--bg); border: 1px solid var(--border-2);
+  border-radius: 4px; font-size: 11.5px; line-height: 1.55;
+  white-space: pre-wrap; word-break: break-all;
+  max-height: 14em; overflow: auto; color: var(--fg); display: block;
+  flex: 1; min-height: 2.5em;
+}
+.repo-grid code.path { white-space: nowrap; }
+
+/* ── Activity heatmap ──────────────────────────────────────────── */
+:root {
+  --heat-0: #ebedf0;
+  --heat-1: #9be9a8;
+  --heat-2: #40c463;
+  --heat-3: #30a14e;
+  --heat-4: #216e39;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --heat-0: #161b22;
+    --heat-1: #0e4429;
+    --heat-2: #006d32;
+    --heat-3: #26a641;
+    --heat-4: #39d353;
+  }
+}
+.heatmap-card {
+  background: var(--panel); border: 1px solid var(--border-2);
+  border-radius: 6px; padding: 0; margin-bottom: 1.25rem;
+}
+/* Heatmap card is a foldable <details>. Default closed; only the
+   one-line "📊 ACTIVITY · N commits…" summary shows. Padding + display
+   match the timer card so the two cards read as a pair. */
+.heatmap-details > summary {
+  cursor: pointer; user-select: none; list-style: none;
+  display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  color: var(--fg-strong);
+  padding: 0.55rem 0.8rem;
+  min-height: 2.5rem;        /* match the timer card line height */
+}
+.heatmap-details > summary .stats { color: var(--fg-muted); font-weight: 400;
+                                     font-size: 12px; }
+.heatmap-details > .heatmap-body {
+  padding: 0 0.8rem 0.7rem; margin-top: 0;
+}
+/* Reusable "section title" pill — same visual as the timer-state idle
+   chip so collapsible sections (activity, timer, …) look consistent. */
+.section-pill {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--fg-muted);
+  padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--border-2); background: var(--bg);
+  white-space: nowrap; line-height: 1.5;
+}
+.heatmap-details > summary::-webkit-details-marker { display: none; }
+.heatmap-details > summary::before {
+  content: '+'; color: var(--fg-muted); font-size: 16px; font-weight: 400;
+  width: auto; min-width: 0; text-align: center; line-height: 1;
+  margin-right: -0.3rem;  /* trim the summary flex gap so the marker hugs */
+}
+.heatmap-details[open] > summary::before { content: '−'; color: var(--accent); }
+.heatmap-details > summary:hover::before { color: var(--accent); }
+.heatmap-details > .scroll, .heatmap-details > .legend { margin-top: 0.6rem; }
+.heatmap-body { display: block; margin-top: 0.6rem; }
+.heatmap-content > .scroll, .heatmap-content > .legend { margin-top: 0.6rem; }
+
+/* Tab row above the heatmap body — Commits | Tokens */
+.heatmap-tabs { display: flex; gap: 0.3rem; margin-bottom: 0.2rem; }
+.heatmap-tab {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--fg-muted); font: inherit; font-size: 11px; line-height: 1;
+  padding: 4px 10px; border-radius: 999px; cursor: pointer;
+}
+.heatmap-tab:hover { color: var(--fg); border-color: var(--accent); }
+.heatmap-tab.active {
+  color: var(--accent); border-color: var(--accent); background: var(--panel-2);
+  font-weight: 600;
+}
+.heatmap-card header { display: flex; align-items: baseline; justify-content: space-between; gap: 0.7rem; margin-bottom: 0.5rem; }
+.heatmap-card header h3 { font-size: 13px; }
+.heatmap-card header .stats { color: var(--fg-muted); font-size: 12px; }
+.heatmap-card .scroll { width: 100%; }
+.heatmap-card svg { display: block; width: 100%; height: auto; }
+.heatmap-card .legend {
+  display: flex; align-items: center; gap: 4px;
+  color: var(--fg-muted); font-size: 11px; margin-top: 0.4rem;
+}
+.heatmap-card .legend span.swatch { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
+.heatmap-card text { fill: var(--fg-muted); font-family: -apple-system, sans-serif; font-size: 9px; }
+.heatmap-card rect.cell { stroke: var(--bg); stroke-width: 1; }
+.heatmap-card rect.cell:hover { stroke: var(--accent); stroke-width: 1.5; }
+/* Cell colours via class — SVG presentation attributes don't accept
+   CSS var(), so we set fill via these rules instead. */
+.heatmap-card rect.cell.heat-0 { fill: var(--heat-0); }
+.heatmap-card rect.cell.heat-1 { fill: var(--heat-1); }
+.heatmap-card rect.cell.heat-2 { fill: var(--heat-2); }
+.heatmap-card rect.cell.heat-3 { fill: var(--heat-3); }
+.heatmap-card rect.cell.heat-4 { fill: var(--heat-4); }
+/* Cells before the data window — drawn so the leftmost column is full,
+   but visually muted so they don't masquerade as real zero-activity days. */
+.heatmap-card rect.cell.out-of-window { opacity: 0.3; }
+
+/* Issue header with branch link + expand-all button. gap drives
+   the spacing between every action in the row. Notes / + are
+   deliberately tight (border-flat + gap: 0 in .notes-btn-group)
+   so they read as a single Notes control. */
+h2.issue-head { display: flex; align-items: center; gap: 0.42rem;
+                 flex-wrap: wrap;
+                 font-size: 15px;
+                 margin-top: 0.2rem; margin-bottom: 0.55rem; }
+h2.issue-head .issue-link { color: var(--accent); }
+h2.issue-head .issue-link:hover { text-decoration: underline; }
+
+/* "Active Nd" / "Idle Nd" card — shown before the summary, always.
+   Green when the latest commit is recent; amber when it's been ≥14
+   days since the last commit. */
+h2.issue-head .idle-card {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 2px 11px;
+  border-radius: 4px;
+  font-size: 13px; font-weight: 600;
+  letter-spacing: 0.02em;
+}
+h2.issue-head .idle-card.idle-card-fresh {
+  background: var(--tint-success);
+  border: 1px solid var(--success);
+  color: var(--success);
+}
+h2.issue-head .idle-card.idle-card-stale {
+  background: var(--tint-warning);
+  border: 1px solid var(--warning);
+  color: var(--warning);
+}
+h2.issue-head .idle-card .idle-card-num { font-variant-numeric: tabular-nums; }
+h2.issue-head .idle-card .idle-card-label {
+  text-transform: uppercase; letter-spacing: 0.06em;
+  font-size: 11px; opacity: 0.85;
+}
+/* Buttons inside the issue head match the row's bumped font size so
+   Console / Notes / + / Expand all read at the same scale as the
+   summary text. Common min-height + line-height: 1 + flex centring
+   so every button — wide text labels and icon-only alike — lines up
+   on a single horizontal baseline regardless of the per-button
+   padding overrides further down. */
+h2.issue-head .btn {
+  font-size: 15px;
+  padding: 6px 14px;
+  font-weight: 500;
+  line-height: 1;
+  height: 30px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+h2.issue-head .notes-btn-group .notes-add-btn { padding: 6px 12px; font-weight: 700; }
+h2.issue-head .notes-btn-count { font-size: 13px; }
+/* Console button disabled state — when an agent is already active or
+   idle for the issue, clicking again would just spawn a redundant
+   tab. Use color + background dimming instead of `opacity` so the
+   styled hover-popover child stays at full visibility (CSS opacity
+   inherits and can't be undone by descendants). */
+h2.issue-head .console-btn[disabled],
+h2.issue-head .console-btn.console-btn-running {
+  cursor: not-allowed;
+  background: var(--panel-2);
+  color: var(--fg-muted);
+  border-color: var(--border-2);
+}
+h2.issue-head .console-btn[disabled]:hover,
+h2.issue-head .console-btn.console-btn-running:hover {
+  background: var(--panel-2);
+  color: var(--fg-muted);
+  border-color: var(--border-2);
+}
+/* Push the action cluster (Open, Console, Pin …) to the right by
+   giving the leftmost button margin-left: auto. The issue-level
+   ↗ Open button is the leftmost action and absorbs the slack. */
+h2.issue-head .open-issue-btn { margin-left: auto; }
+/* Pin / unpin — same size as the other action buttons, with a clear
+   "active" treatment when the issue is pinned so the leftmost tab makes
+   sense at a glance. */
+h2.issue-head .pin-issue-btn {
+  padding: 6px 10px;
+  line-height: 1;
+}
+h2.issue-head .pin-issue-btn:not(.pinned) { opacity: 0.55; }
+h2.issue-head .pin-issue-btn:not(.pinned):hover { opacity: 1; }
+h2.issue-head .pin-issue-btn.pinned {
+  background: var(--tint-warning);
+  border-color: var(--warning);
+}
+/* Icon-only Expand/Collapse-all toggle. Sized to match the pin /
+   trash icon buttons exactly so the three sit as visual peers at the
+   end of the issue-head row. The generic h2.issue-head .btn rule
+   bumps every action button to 15px / 6px-14px padding — override
+   the horizontal padding to keep the +/− glyph centred without
+   eating space. The .expanded class drives the active colour state
+   (set in JS by refreshExpandLabel) so the button reads its current
+   meaning at a glance, the same way the 📌 pin button does. */
+h2.issue-head .expand-all-btn {
+  padding: 6px 10px;
+  min-width: 2em; text-align: center;
+}
+h2.issue-head .expand-all-btn .expand-all-label {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+h2.issue-head .expand-all-btn.expanded {
+  background: rgba(9, 105, 218, 0.12);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+h2.issue-head .expand-all-btn.expanded:hover {
+  filter: brightness(1.05);
+}
+/* Commit list (also reused for the dirty-files table). Caps to 10 rows
+   visible (~ 32em) — beyond that the list scrolls vertically inside the
+   bordered box so it never blows out the card. */
+.commit-list { list-style: none; padding: 0; margin: 0.4rem 0 0;
+               background: var(--bg); border: 1px solid var(--border-2); border-radius: 4px;
+               max-height: 22em; overflow-y: auto; }
+.commit-list li {
+  display: grid;
+  /* sha · "YYYY-MM-DD HH:MM" · author · subject */
+  grid-template-columns: 9ch 17ch minmax(7em, 12em) 1fr;
+  gap: 0 0.9rem; padding: 0.4rem 0.7rem;
+  align-items: baseline; font-size: 12px;
+  border-bottom: 1px solid var(--border-2);
+}
+.commit-list li:last-child { border-bottom: none; }
+.commit-list li.empty { display: block; color: var(--fg-muted); }
+.commit-list .sha { font-family: "JetBrains Mono", monospace; color: var(--accent); text-decoration: none; }
+.commit-list a.sha:hover { text-decoration: underline; text-underline-offset: 2px; }
+.commit-list .date { color: var(--fg-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.commit-list .author { color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.commit-list .subject { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Branch fork-point row — distinct so users can see "this is where the
+   branch came from in upstream". */
+.commit-list li.is-merge-base {
+  background: var(--panel-2);
+  border-top: 2px dashed var(--accent);
+  position: relative;
+}
+.commit-list li.is-merge-base .sha { color: var(--fg-muted); }
+.commit-list li.is-merge-base .subject::before {
+  content: '⤴ fork '; color: var(--accent); font-weight: 600; font-size: 10px;
+  padding: 0 4px; margin-right: 4px; background: var(--bg);
+  border: 1px solid var(--accent); border-radius: 3px;
+}
+
+/* Dirty-files table — only two columns: status code + path. */
+.commit-list.dirty-list li { grid-template-columns: 4ch 1fr; }
+.commit-list.dirty-list .sha {
+  color: var(--warning); white-space: pre;
+  background: var(--panel-2); padding: 0 4px; border-radius: 2px;
+  text-align: center;
+}
+/* File-path link inside the working-tree list — clickable, opens the
+   chosen editor via POST /api/open-file. */
+.commit-list.dirty-list a.file-link {
+  color: var(--accent); cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.commit-list.dirty-list a.file-link:hover {
+  text-decoration: underline; text-underline-offset: 2px;
+}
+
+/* Inner tab strip inside a repo card — switches between Working tree,
+   Last commits, and Unpushed. Sits below the title bar / last-commit row
+   and above the active panel. */
+.repo-inner-tabs {
+  display: flex; gap: 0.4rem;
+  border-bottom: 1px solid var(--border-2);
+  margin: 0.4rem 0 0; padding: 0 0 0.3rem;
+}
+.repo-inner-tab {
+  background: transparent; border: 1px solid transparent;
+  padding: 4px 10px; border-radius: 4px 4px 0 0;
+  font: inherit; font-size: 12px;
+  color: var(--fg-muted); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  border-bottom: 2px solid transparent;
+  transition: color 80ms ease, border-color 80ms ease;
+}
+.repo-inner-tab:hover { color: var(--fg); }
+.repo-inner-tab .tab-count {
+  background: var(--panel-2); color: var(--fg-muted);
+  padding: 0 6px; border-radius: 999px; font-size: 10.5px;
+  font-variant-numeric: tabular-nums; min-width: 1.5em; text-align: center;
+}
+.repo-inner-tab.empty { opacity: 0.55; }
+.repo-inner-tab.empty .tab-count { background: transparent; }
+.repo-inner-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.repo-inner-tab.active .tab-count { background: var(--tint-success);
+                                     color: var(--accent); }
+/* Reserve the same height as a 10-row commit-list (.commit-list has
+   max-height: 22em) so switching between tabs never reflows the card.
+   Sparse content (e.g. 3 dirty files) still renders at its natural size,
+   but the panel itself stays tall. */
+.repo-inner-panel {
+  padding-top: 0.3rem;
+  min-height: 22.4em;
+}
+.tab-empty {
+  display: flex; align-items: center; justify-content: center;
+  height: 22em;
+  margin-top: 0.4rem;
+  color: var(--fg-muted); font-size: 12px;
+  border: 1px dashed var(--border-2); border-radius: 4px;
+  background: var(--bg);
+}
+
+/* Standalone Worktree path block (no longer in the side grid). */
+details.inner-details > code.path {
+  display: block; margin: 0.4rem 0 0;
+  padding: 0.5rem 0.7rem;
+  background: var(--bg); border: 1px solid var(--border-2);
+  border-radius: 4px; font-size: 11.5px; line-height: 1.55;
+  color: var(--fg);
+  white-space: nowrap; overflow-x: auto;
+}
+
+details.inner-details { margin-top: 0.6rem; }
+details.inner-details summary { cursor: pointer; user-select: none; color: var(--accent); font-size: 12px; padding: 2px 0; }
+details.inner-details summary:hover { text-decoration: underline; }
+details.inner-details[open] > summary { color: var(--fg-muted); }
+
+.footer { color: var(--fg-muted); font-size: 11px; margin-top: 0.7rem;
+          padding-top: 0.6rem; border-top: 1px solid var(--border-2);
+          display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.footer strong { color: var(--fg); font-weight: 500; }
+.footer .idle-warn strong { color: var(--warning); }
+.footer .has-prompt { color: var(--accent); cursor: help; }
+
+/* ── Analysis pane ─────────────────────────────────────────────── */
+.analysis {
+  display: none;
+  background: var(--bg); border: 1px solid var(--border-2);
+  border-left: 3px solid var(--accent); border-radius: 4px;
+  padding: 0.65rem 0.85rem; margin: 0.85rem 0 0;
+}
+.analysis.open { display: block; animation: fadein 0.18s ease-out; }
+@keyframes fadein { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+.analysis-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.7rem; margin-bottom: 0.4rem; }
+.analysis-head h4 { margin: 0; }
+.analysis-head .gen { color: var(--fg-muted); font-size: 11px; font-family: "JetBrains Mono", monospace; }
+.analysis-head .stale { color: var(--warning); }
+.analysis pre { margin: 0;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                font-size: 12.5px; line-height: 1.6; white-space: pre-wrap;
+                background: transparent; border: none; color: var(--fg); padding: 0; }
+
+.analysis-cmd {
+  background: var(--panel); border: 1px solid var(--border-2);
+  border-radius: 4px; padding: 0.5rem 0.7rem; margin-top: 0.4rem;
+  font-family: "JetBrains Mono", monospace; font-size: 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+}
+.analysis-cmd code { background: transparent; color: var(--fg); padding: 0; user-select: all; }
+
+.analysis-status { color: var(--fg-muted); font-size: 12px; padding: 0.4rem 0; font-style: italic; }
+.analysis-status.waiting::after {
+  content: ''; display: inline-block; width: 8px; height: 8px;
+  margin-left: 6px; background: var(--accent); border-radius: 50%;
+  animation: pulse 1s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:0.3}50%{opacity:1} }
+
+.copy-cmd {
+  background: transparent; color: var(--accent);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 1px 8px; cursor: pointer; font: inherit; font-size: 11px; white-space: nowrap;
+}
+.copy-cmd:hover { background: var(--panel-2); }
+.copy-cmd.copied { color: var(--success); border-color: var(--success); }

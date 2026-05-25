@@ -1,0 +1,630 @@
+"""Agent-to-agent messaging — MCP server backed by SQLite.
+
+Hosts an in-process Model Context Protocol server (JSON-RPC 2.0 over
+HTTP) so the dashboard's agents can leave each other messages. The
+HTTP transport lives in `agent_workspace.py`; this module is the
+dispatcher + tool implementations + the `agent_messages` table.
+
+Three tools are exposed to claude:
+
+    send_message(to: str, text: str)
+        Generic mail. Sender identity is the URL ?agent=<id>.
+
+    read_messages(unread_only: bool = true)
+        Returns the calling agent's inbox as a JSON list. Marks each
+        returned row read_at = now() so the next call doesn't
+        re-deliver them.
+
+    request_review(target: str, ref: str, context: str = "")
+        Convenience wrapper that writes a kind='review_request'
+        message with structured payload. Recipient reads it via
+        read_messages and replies via send_message.
+
+Schema for `agent_messages` is created idempotently by init_db()
+which the dashboard calls from its startup migration block.
+"""
+from __future__ import annotations
+
+import json
+import sqlite3
+import time
+
+# ── Schema ────────────────────────────────────────────────────────────────
+
+# Table-only DDL — runs first. Indexes are created in init_db AFTER
+# the per-column migration below, otherwise an old DB that already
+# has the table (without `in_reply_to`) would fail on the index DDL
+# before the ALTER TABLE has a chance to add the column.
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS agent_messages (
+  id          INTEGER PRIMARY KEY,
+  from_agent  TEXT NOT NULL,          -- issue key or '__agent__'
+  to_agent    TEXT NOT NULL,
+  kind        TEXT NOT NULL,          -- 'message' | 'review_request'
+                                       --          | 'review_response'
+  payload     TEXT NOT NULL,          -- JSON: {text, ref?, context?}
+  created_at  INTEGER NOT NULL,
+  read_at     INTEGER,                -- NULL = unread
+  in_reply_to INTEGER                 -- agent_messages.id this replies to
+);
+"""
+
+_SCHEMA_INDEXES = """
+CREATE INDEX IF NOT EXISTS idx_agent_messages_to_unread
+  ON agent_messages(to_agent, read_at);
+CREATE INDEX IF NOT EXISTS idx_agent_messages_from
+  ON agent_messages(from_agent);
+CREATE INDEX IF NOT EXISTS idx_agent_messages_in_reply_to
+  ON agent_messages(in_reply_to);
+"""
+
+
+def init_db(conn: sqlite3.Connection) -> None:
+    """Create the agent_messages table + indexes if they don't exist.
+
+    Idempotent; safe to call on every startup. Also migrates older
+    databases that pre-date the `in_reply_to` column.
+    """
+    conn.executescript(_SCHEMA)
+    cols = {r[1] for r in conn.execute(
+        "PRAGMA table_info(agent_messages)").fetchall()}
+    if "in_reply_to" not in cols:
+        conn.execute("ALTER TABLE agent_messages "
+                     "ADD COLUMN in_reply_to INTEGER")
+    # Indexes go last so the one over in_reply_to never tries to
+    # reference a column the migration hasn't added yet.
+    conn.executescript(_SCHEMA_INDEXES)
+    conn.commit()
+
+
+# ── Storage helpers ───────────────────────────────────────────────────────
+
+VALID_KINDS = ("message", "review_request", "review_response")
+
+
+def send_message(conn: sqlite3.Connection,
+                  from_agent: str,
+                  to_agent: str,
+                  kind: str,
+                  payload: dict,
+                  in_reply_to: int | None = None) -> int:
+    """Insert one row. Returns the new id. `in_reply_to` chains
+    this row to a previous agent_messages.id so the dashboard can
+    render the conversation thread."""
+    if kind not in VALID_KINDS:
+        raise ValueError(f"unknown kind: {kind}")
+    if not from_agent or not to_agent:
+        raise ValueError("from_agent and to_agent are required")
+    now = int(time.time())
+    cur = conn.execute(
+        "INSERT INTO agent_messages "
+        "(from_agent, to_agent, kind, payload, created_at, in_reply_to) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (from_agent, to_agent, kind, json.dumps(payload, default=str),
+         now, int(in_reply_to) if in_reply_to else None),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def read_messages(conn: sqlite3.Connection,
+                   agent: str,
+                   unread_only: bool = True,
+                   mark_read: bool = True,
+                   limit: int = 100) -> list[dict]:
+    """Return the agent's inbox. When mark_read=True, each returned
+    row gets read_at set so subsequent calls don't redeliver them.
+    """
+    if not agent:
+        return []
+    where = ["to_agent = ?"]
+    params: list = [agent]
+    if unread_only:
+        where.append("read_at IS NULL")
+    rows = conn.execute(
+        f"SELECT id, from_agent, kind, payload, created_at, read_at, "
+        f"       in_reply_to "
+        f"FROM agent_messages WHERE {' AND '.join(where)} "
+        f"ORDER BY created_at ASC LIMIT ?",
+        (*params, limit),
+    ).fetchall()
+    out: list[dict] = []
+    ids_to_mark: list[int] = []
+    for r in rows:
+        try:
+            payload = json.loads(r[3])
+        except (TypeError, ValueError):
+            payload = {"text": r[3]}
+        out.append({
+            "id": r[0],
+            "from": r[1],
+            "kind": r[2],
+            "payload": payload,
+            "created_at": r[4],
+            "read_at": r[5],
+            "in_reply_to": r[6],
+        })
+        if mark_read and r[5] is None:
+            ids_to_mark.append(r[0])
+    if ids_to_mark:
+        now = int(time.time())
+        # Use executemany so a single transaction marks the lot.
+        conn.executemany(
+            "UPDATE agent_messages SET read_at = ? WHERE id = ?",
+            [(now, i) for i in ids_to_mark],
+        )
+        conn.commit()
+    return out
+
+
+def list_thread(conn: sqlite3.Connection,
+                 agent: str,
+                 limit: int = 200) -> list[dict]:
+    """Combined view: every message where this agent is either the
+    sender or the recipient, oldest-first so the dashboard can
+    render a chronological thread with reply indents."""
+    if not agent:
+        return []
+    rows = conn.execute(
+        "SELECT id, from_agent, to_agent, kind, payload, "
+        "       created_at, read_at, in_reply_to "
+        "FROM agent_messages "
+        "WHERE from_agent = ? OR to_agent = ? "
+        "ORDER BY created_at ASC LIMIT ?",
+        (agent, agent, limit),
+    ).fetchall()
+    out: list[dict] = []
+    for r in rows:
+        try:
+            payload = json.loads(r[4])
+        except (TypeError, ValueError):
+            payload = {"text": r[4]}
+        out.append({
+            "id": r[0],
+            "from": r[1],
+            "to": r[2],
+            "kind": r[3],
+            "payload": payload,
+            "created_at": r[5],
+            "read_at": r[6],
+            "in_reply_to": r[7],
+        })
+    return out
+
+
+def list_outbox(conn: sqlite3.Connection,
+                 agent: str,
+                 limit: int = 100) -> list[dict]:
+    """Sent messages from this agent, newest first. Used by the
+    dashboard's Messages sub-tab — never marks anything read."""
+    if not agent:
+        return []
+    rows = conn.execute(
+        "SELECT id, to_agent, kind, payload, created_at, read_at, "
+        "       in_reply_to "
+        "FROM agent_messages WHERE from_agent = ? "
+        "ORDER BY created_at DESC LIMIT ?",
+        (agent, limit),
+    ).fetchall()
+    out: list[dict] = []
+    for r in rows:
+        try:
+            payload = json.loads(r[3])
+        except (TypeError, ValueError):
+            payload = {"text": r[3]}
+        out.append({
+            "id": r[0],
+            "to": r[1],
+            "kind": r[2],
+            "payload": payload,
+            "created_at": r[4],
+            "read_at": r[5],
+            "in_reply_to": r[6],
+        })
+    return out
+
+
+def delete_message(conn: sqlite3.Connection, message_id: int) -> bool:
+    """Hard-delete one message row. Returns True if a row was
+    removed. Used by the dashboard's per-row ✕ button — the
+    deletion is not undoable.
+    """
+    cur = conn.execute(
+        "DELETE FROM agent_messages WHERE id = ?", (int(message_id),))
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def delete_thread(conn: sqlite3.Connection, message_id: int) -> int:
+    """Hard-delete every message in the same in_reply_to chain as
+    `message_id`. Walks up to the root (in_reply_to is NULL or
+    points outside the chain), then walks down through every
+    descendant via in_reply_to, then deletes the whole set in one
+    transaction. Returns the row count.
+    """
+    msg_id = int(message_id)
+    # Walk up to the root.
+    cur_id: int | None = msg_id
+    seen: set[int] = set()
+    root = msg_id
+    while cur_id is not None and cur_id not in seen:
+        seen.add(cur_id)
+        row = conn.execute(
+            "SELECT in_reply_to FROM agent_messages WHERE id = ?",
+            (cur_id,),
+        ).fetchone()
+        if row is None:
+            break
+        parent = row[0]
+        if parent is None:
+            root = cur_id
+            break
+        cur_id = int(parent)
+        root = cur_id
+    # Walk down from the root collecting descendants (BFS).
+    to_visit: list[int] = [root]
+    targets: set[int] = set()
+    while to_visit:
+        n = to_visit.pop()
+        if n in targets:
+            continue
+        targets.add(n)
+        kids = conn.execute(
+            "SELECT id FROM agent_messages WHERE in_reply_to = ?",
+            (n,),
+        ).fetchall()
+        for (kid_id,) in kids:
+            if kid_id not in targets:
+                to_visit.append(int(kid_id))
+    if not targets:
+        return 0
+    placeholders = ",".join("?" * len(targets))
+    cur = conn.execute(
+        f"DELETE FROM agent_messages WHERE id IN ({placeholders})",
+        tuple(targets),
+    )
+    conn.commit()
+    return cur.rowcount
+
+
+def delete_all_messages(conn: sqlite3.Connection, agent: str) -> int:
+    """Hard-delete every message visible to `agent` — those addressed
+    to it (inbox) and those sent by it (outbox). Returns deleted count."""
+    cur = conn.execute(
+        "DELETE FROM agent_messages WHERE from_agent = ? OR to_agent = ?",
+        (agent, agent),
+    )
+    conn.commit()
+    return cur.rowcount
+
+
+def unread_counts(conn: sqlite3.Connection) -> dict[str, int]:
+    """Map of agent → count of unread messages addressed to it.
+    Used to attach badge counts in gather_all()."""
+    rows = conn.execute(
+        "SELECT to_agent, COUNT(*) FROM agent_messages "
+        "WHERE read_at IS NULL GROUP BY to_agent"
+    ).fetchall()
+    return {r[0]: int(r[1]) for r in rows}
+
+
+# ── JSON-RPC 2.0 dispatcher ───────────────────────────────────────────────
+
+# MCP server descriptor — claude reads this during initialize.
+SERVER_INFO = {
+    "name": "Agentic Engineering MCP",
+    "version": "0.1.0",
+}
+
+# Slug used as the key under `mcpServers` in each agent's
+# --mcp-config file AND as the prefix in claude's --allowedTools
+# permission rule (`mcp__<slug>`). Keep these in sync: if you
+# rename the slug here, every agent's settings.json claude wrote
+# during a previous run will keep the old name in its permission
+# allow-list, which is fine but means the rename only takes
+# effect on fresh sessions.
+SERVER_SLUG = "agentic-engineering"
+
+# Tool list. Each entry follows MCP's tools/list schema. Inputs use
+# JSON-Schema. claude reads `description` to decide when to call;
+# keep it short, action-oriented.
+TOOLS = [
+    {
+        "name": "send_message",
+        "description": (
+            "Send a message to another agent on this dashboard. "
+            "The recipient is identified by its issue key (e.g. "
+            "'BSS-3733') or the sentinel '__agent__' for the "
+            "General Agent. When replying to a message from "
+            "read_messages, pass that message's `id` as "
+            "`in_reply_to` so the dashboard threads your reply "
+            "underneath the original."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string",
+                        "description": "Recipient agent id."},
+                "text": {"type": "string",
+                          "description": "Message body."},
+                "in_reply_to": {"type": "integer",
+                                 "description": ("Optional id of the "
+                                                  "message you are "
+                                                  "replying to.")},
+            },
+            "required": ["to", "text"],
+        },
+    },
+    {
+        "name": "read_messages",
+        "description": (
+            "Read this agent's inbox. Returns a JSON list of "
+            "messages addressed to me. By default returns only "
+            "unread messages and marks them read. Pass "
+            "unread_only=false to see history too."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "unread_only": {"type": "boolean", "default": True},
+                "limit": {"type": "integer", "default": 50,
+                           "minimum": 1, "maximum": 200},
+            },
+        },
+    },
+    {
+        "name": "request_review",
+        "description": (
+            "Ask another agent (typically '__agent__', the General "
+            "Agent) to review some work. The `ref` is usually a "
+            "git commit sha, branch, or file path the reviewer can "
+            "inspect; `context` is free-form text explaining what "
+            "to focus on."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "target": {"type": "string",
+                            "description": "Reviewer agent id."},
+                "ref": {"type": "string",
+                         "description": ("Git commit sha, branch, "
+                                          "or file path to review.")},
+                "context": {"type": "string",
+                             "description": "What to focus on.",
+                             "default": ""},
+            },
+            "required": ["target", "ref"],
+        },
+    },
+    {
+        "name": "broadcast_message",
+        "description": (
+            "Send the same message to every issue agent that has a "
+            "live terminal on the dashboard right now. The General "
+            "Agent ('__agent__') is excluded — broadcasts are for "
+            "fanning information out to per-issue workers, not "
+            "echoing back to yourself."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string",
+                          "description": "Message body."},
+            },
+            "required": ["text"],
+        },
+    },
+]
+
+
+# Protocol version we advertise; claude-cli checks this during
+# initialize and falls back gracefully if mismatched.
+PROTOCOL_VERSION = "2024-11-05"
+
+
+class McpServer:
+    """JSON-RPC 2.0 dispatcher. Statless; every dispatch call takes
+    the calling agent's id (pulled from the URL ?agent= by the HTTP
+    handler in agent_workspace.py) and a connection-factory so the
+    server doesn't hold its own sqlite handle.
+
+    Two optional callbacks let the HTTP layer share what it knows
+    about agents without this module importing agent_workspace:
+
+      known_agents() → set[str]   — every recognised id; used by
+                                     send_message to reject typos /
+                                     non-existent recipients.
+      live_agents()  → list[str]  — agents with an active pty;
+                                     used by broadcast_message to
+                                     pick recipients.
+
+    Both default to "accept anything / no-one" so existing callers
+    (the smoke tests) don't break.
+    """
+
+    def __init__(self, db_connect, *,
+                  known_agents=None, live_agents=None):
+        # db_connect: zero-arg callable that returns a fresh
+        # sqlite3.Connection. The handler closes it after each call.
+        self._db = db_connect
+        self._known_agents = known_agents
+        self._live_agents = live_agents or (lambda: [])
+
+    def dispatch(self, agent: str, req: dict) -> dict:
+        """Handle one JSON-RPC request. Returns the response object.
+
+        Always returns a result-shaped dict (with `jsonrpc`, `id`,
+        and either `result` or `error`). The HTTP handler just
+        json.dumps and sends back.
+        """
+        rpc_id = req.get("id")
+        method = req.get("method") or ""
+        params = req.get("params") or {}
+        try:
+            if method == "initialize":
+                return self._ok(rpc_id, {
+                    "protocolVersion": PROTOCOL_VERSION,
+                    "capabilities": {"tools": {}},
+                    "serverInfo": SERVER_INFO,
+                })
+            if method == "notifications/initialized":
+                # Notifications carry no id and want no response.
+                return None
+            if method == "tools/list":
+                return self._ok(rpc_id, {"tools": TOOLS})
+            if method == "tools/call":
+                return self._handle_tool_call(agent, rpc_id, params)
+            return self._err(rpc_id, -32601, f"method not found: {method}")
+        except Exception as ex:  # noqa: BLE001
+            return self._err(rpc_id, -32603, f"internal error: {ex}")
+
+    # ── tool/call routing ────────────────────────────────────────
+
+    def _handle_tool_call(self, agent: str, rpc_id, params: dict) -> dict:
+        name = params.get("name") or ""
+        args = params.get("arguments") or {}
+        if not agent:
+            return self._err(rpc_id, -32602,
+                              "missing agent id (URL ?agent=…)")
+        try:
+            if name == "send_message":
+                text = self._tool_send_message(agent, args)
+            elif name == "read_messages":
+                text = self._tool_read_messages(agent, args)
+            elif name == "request_review":
+                text = self._tool_request_review(agent, args)
+            elif name == "broadcast_message":
+                text = self._tool_broadcast_message(agent, args)
+            else:
+                return self._err(rpc_id, -32602, f"unknown tool: {name}")
+        except ValueError as ex:
+            # Surface validation errors as a tool error block so
+            # claude sees a useful message instead of a JSON-RPC
+            # framing error.
+            return self._ok(rpc_id, {
+                "content": [{"type": "text",
+                              "text": f"error: {ex}"}],
+                "isError": True,
+            })
+        return self._ok(rpc_id, {
+            "content": [{"type": "text", "text": text}],
+        })
+
+    def _validate_recipient(self, to: str) -> None:
+        """Reject typos / dead recipients: the `to` agent must
+        appear in the HTTP layer's known-agent set when one is
+        configured. Falls open (no check) when no callback was
+        wired — keeps the unit tests + smoke scripts simple."""
+        if self._known_agents is None:
+            return
+        try:
+            known = self._known_agents()
+        except Exception:  # noqa: BLE001 — never crash the dispatcher
+            return
+        if known and to not in known:
+            sample = sorted(known)
+            if len(sample) > 6:
+                sample = sample[:6] + ["…"]
+            raise ValueError(
+                f"unknown agent: {to!r}. Known: {', '.join(sample)}")
+
+    def _tool_send_message(self, agent: str, args: dict) -> str:
+        to = (args.get("to") or "").strip()
+        text = (args.get("text") or "").strip()
+        in_reply_to = args.get("in_reply_to")
+        if not to:
+            raise ValueError("missing `to`")
+        if not text:
+            raise ValueError("missing `text`")
+        if in_reply_to is not None:
+            try:
+                in_reply_to = int(in_reply_to)
+            except (TypeError, ValueError) as ex:
+                raise ValueError(
+                    "`in_reply_to` must be an integer id") from ex
+        self._validate_recipient(to)
+        conn = self._db()
+        try:
+            mid = send_message(conn, agent, to, "message", {"text": text},
+                                in_reply_to=in_reply_to)
+        finally:
+            conn.close()
+        if in_reply_to:
+            return (f"sent message #{mid} to {to} "
+                    f"(reply to #{in_reply_to})")
+        return f"sent message #{mid} to {to}"
+
+    def _tool_broadcast_message(self, agent: str, args: dict) -> str:
+        """Send `text` to every live agent except the General Agent
+        (and the sender). Returns a count + the recipient list so the
+        caller knows who got it."""
+        text = (args.get("text") or "").strip()
+        if not text:
+            raise ValueError("missing `text`")
+        try:
+            recipients = list(self._live_agents() or [])
+        except Exception:  # noqa: BLE001
+            recipients = []
+        recipients = [r for r in recipients
+                      if r and r != "__agent__" and r != agent]
+        if not recipients:
+            return "no live issue agents to broadcast to"
+        conn = self._db()
+        try:
+            ids: list[int] = []
+            for to in recipients:
+                mid = send_message(conn, agent, to, "message",
+                                    {"text": text, "broadcast": True})
+                ids.append(mid)
+        finally:
+            conn.close()
+        return (f"broadcast to {len(ids)} agent(s): "
+                f"{', '.join(recipients)} (ids: "
+                f"{', '.join(f'#{i}' for i in ids)})")
+
+    def _tool_read_messages(self, agent: str, args: dict) -> str:
+        unread_only = bool(args.get("unread_only", True))
+        limit = int(args.get("limit", 50))
+        conn = self._db()
+        try:
+            msgs = read_messages(conn, agent,
+                                  unread_only=unread_only,
+                                  mark_read=True,
+                                  limit=limit)
+        finally:
+            conn.close()
+        if not msgs:
+            return ("no new messages" if unread_only
+                    else "no messages")
+        # Return as JSON so claude can parse without extra prompting.
+        return json.dumps(msgs, indent=2, default=str)
+
+    def _tool_request_review(self, agent: str, args: dict) -> str:
+        target = (args.get("target") or "").strip()
+        ref = (args.get("ref") or "").strip()
+        context = (args.get("context") or "").strip()
+        if not target:
+            raise ValueError("missing `target`")
+        if not ref:
+            raise ValueError("missing `ref`")
+        conn = self._db()
+        try:
+            mid = send_message(conn, agent, target, "review_request",
+                                {"ref": ref, "context": context,
+                                 "text": (f"Please review {ref}"
+                                          + (f" — {context}" if context
+                                             else ""))})
+        finally:
+            conn.close()
+        return f"sent review_request #{mid} to {target} for ref={ref}"
+
+    # ── helpers ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _ok(rpc_id, result):
+        return {"jsonrpc": "2.0", "id": rpc_id, "result": result}
+
+    @staticmethod
+    def _err(rpc_id, code, message):
+        return {"jsonrpc": "2.0", "id": rpc_id,
+                "error": {"code": code, "message": message}}

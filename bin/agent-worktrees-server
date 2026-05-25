@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Thin entry point — runs the Python server module out of this checkout.
+# Resolve through symlinks so the wrapper still works when installed at
+# ~/.local/bin/agent-worktrees-server -> <repo>/bin/agent-worktrees-server.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P -- "$(dirname -- "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P -- "$(dirname -- "$SOURCE")" && pwd)"
+
+# The Python server writes its own pidfile after a successful port
+# bind (see agent_workspace.py). Writing it from this wrapper would
+# clobber a good pidfile when a second start collides on the port,
+# so we deliberately don't.
+
+exec python3 "$SCRIPT_DIR/../agent_workspace.py" "$@"

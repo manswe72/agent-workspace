@@ -1,0 +1,4 @@
+# commits.jsonl is append-only-ish (one row per sha, alphabetical order)
+# so the union merge driver can resolve concurrent inserts from multiple
+# machines without a conflict — applies to every user's subfolder.
+*/commits.jsonl merge=union

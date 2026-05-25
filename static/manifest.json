@@ -1,0 +1,18 @@
+{
+  "name": "Agent Workspace",
+  "short_name": "Agent Workspace",
+  "description": "Status board for every ~/git/worktrees/<workspace>/<repo> with per-workspace agent session, notes, and git ops.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "icons": [
+    {
+      "src": "/static/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ]
+}

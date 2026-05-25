@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.cache/
+*.swp
+.DS_Store
+.dockerignore
+# Local server state — created by tests / first-run experiments.
+agent-workspace.db
+workspace.db
+# Build output
+build-dir/
+.flatpak-builder/
+*.snap
+parts/
+prime/
+stage/

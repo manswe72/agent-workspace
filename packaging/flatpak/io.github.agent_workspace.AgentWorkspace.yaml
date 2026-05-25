@@ -1,0 +1,61 @@
+# Flatpak manifest for agent-workspace.
+#
+# App-id is a PLACEHOLDER — when the project moves to a personal
+# GitHub account, rename to io.github.<your-user>.AgentWorkspace and
+# update the .desktop / .metainfo.xml file basenames + Icon=/<id>
+# references to match.
+#
+# Build:
+#   flatpak install --user flathub org.freedesktop.Sdk//24.08 \
+#                                    org.freedesktop.Platform//24.08
+#   flatpak-builder --user --install --force-clean build-dir \
+#     packaging/flatpak/io.github.agent_workspace.AgentWorkspace.yaml
+#
+# Run:
+#   flatpak run io.github.agent_workspace.AgentWorkspace
+
+app-id: io.github.agent_workspace.AgentWorkspace
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: agent-workspace
+
+finish-args:
+  # Local HTTP dashboard binds 127.0.0.1:8765 — networking required so
+  # the in-browser client can reach the server.
+  - --share=network
+  # Read the user's worktrees + git config + .claude/ data dir.
+  - --filesystem=home
+  # `flatpak-spawn --host` to launch the user's terminal emulator
+  # (gnome-terminal, ghostty, alacritty, …) and shell out to git.
+  - --talk-name=org.freedesktop.Flatpak
+  # X11/Wayland — the server pops a browser tab on first start.
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  # Desktop notifications via notify-send.
+  - --talk-name=org.freedesktop.Notifications
+
+modules:
+  - name: agent-workspace
+    buildsystem: simple
+    build-commands:
+      - install -d /app/share/agent-workspace
+      - cp -r agent_workspace.py awlib static templates VERSION
+            /app/share/agent-workspace/
+      - install -d /app/bin
+      - install -m 0755 packaging/flatpak/launcher.sh /app/bin/agent-workspace
+      - install -d /app/share/applications
+      - install -m 0644
+            packaging/flatpak/io.github.agent_workspace.AgentWorkspace.desktop
+            /app/share/applications/
+      - install -d /app/share/metainfo
+      - install -m 0644
+            packaging/flatpak/io.github.agent_workspace.AgentWorkspace.metainfo.xml
+            /app/share/metainfo/
+      - install -d /app/share/icons/hicolor/scalable/apps
+      - install -m 0644 static/agent-icon.svg
+            /app/share/icons/hicolor/scalable/apps/io.github.agent_workspace.AgentWorkspace.svg
+    sources:
+      - type: dir
+        path: ../..

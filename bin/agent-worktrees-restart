@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Restart the agent-workspace server. Kills the process recorded in the
+# pidfile (if any), then starts a new server detached, logging to
+# ~/.cache/agent-workspace/server.log.
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P -- "$(dirname -- "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P -- "$(dirname -- "$SOURCE")" && pwd)"
+
+# Platform-aware cache dir — matches agent_workspace.py's
+# _default_cache_dir() so the Python server and the shell wrappers
+# agree on where pidfiles / logs live.
+case "$(uname -s)" in
+  Darwin)
+    CACHE="$HOME/Library/Caches/agent-workspace" ;;
+  MINGW*|MSYS*|CYGWIN*)
+    CACHE="${LOCALAPPDATA:-$HOME/AppData/Local}/agent-workspace" ;;
+  *)
+    CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/agent-workspace" ;;
+esac
+mkdir -p "$CACHE"
+
+# Discover --port from forwarded args so we target the right per-port
+# pidfile / log. Default matches agent_workspace.py (8765).
+PORT=8765
+prev=""
+for a in "$@"; do
+  if [[ "$prev" == "--port" || "$prev" == "-p" ]]; then
+    PORT="$a"
+  fi
+  case "$a" in
+    --port=*) PORT="${a#*=}" ;;
+  esac
+  prev="$a"
+done
+
+PIDFILE="$CACHE/server.${PORT}.pid"
+LOGFILE="$CACHE/server.${PORT}.log"
+
+if [ -f "$PIDFILE" ] && pid=$(cat "$PIDFILE") && [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+  echo "Stopping server (pid $pid)..."
+  kill "$pid"
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.5
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    echo "  still alive, sending SIGKILL"
+    kill -9 "$pid" || true
+  fi
+else
+  echo "No server running on port $PORT (no valid $PIDFILE)"
+fi
+
+echo "Starting server (logs: $LOGFILE)..."
+nohup "$SCRIPT_DIR/agent-worktrees-server" --no-open "$@" >>"$LOGFILE" 2>&1 &
+disown
+sleep 0.3
+if [ -f "$PIDFILE" ]; then
+  echo "  pid $(cat "$PIDFILE")"
+fi

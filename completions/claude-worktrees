@@ -1,0 +1,19 @@
+# bash completion for claude-worktrees
+_claude_worktrees() {
+  local cur
+  COMPREPLY=()
+  cur="${COMP_WORDS[COMP_CWORD]}"
+
+  if [[ "$cur" == --terminal=* ]]; then
+    COMPREPLY=( $(compgen -W "gnome ghostty" -- "${cur#--terminal=}") )
+    return 0
+  fi
+  if [[ "$cur" == -* ]]; then
+    COMPREPLY=( $(compgen -W "--terminal= -h --help" -- "$cur") )
+    # Don't append a space after --terminal= so the user can type the value.
+    if [[ "${COMPREPLY[*]}" == "--terminal=" ]]; then
+      compopt -o nospace 2>/dev/null
+    fi
+  fi
+}
+complete -F _claude_worktrees claude-worktrees

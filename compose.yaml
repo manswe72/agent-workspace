@@ -1,0 +1,32 @@
+# Run the dashboard as a container. Defaults assume the typical layout:
+#   ~/git/worktrees/        — your active issue worktrees
+#   ~/git/<repo>/           — primary checkouts (core, bssweb, doc, …)
+#   ~/git/agent-workspace/ — this repo (must be a git checkout if you want sync)
+#   ~/.ssh/                 — keys for ssh:// git remotes
+#
+# Adjust the host-side paths to taste. The "Open in terminal tabs" button on
+# the dashboard does NOT work from inside the container (no gnome-terminal
+# inside) — run `bin/agent-worktrees` on the host directly.
+
+services:
+  dashboard:
+    build: .
+    image: agent-workspace:latest
+    container_name: agent-workspace
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      # Worktrees — read-write so the server can materialize missing dirs
+      # via `git worktree add`. Make read-only if you'd rather forbid it
+      # and pass --no-materialize via `command:` below.
+      - ${HOME}/git/worktrees:/worktrees:rw
+      # Primary repos — needed to run `git worktree add`. Read-write because
+      # `git fetch origin` and `git worktree add` write metadata under .git.
+      - ${HOME}/git:/primaries:rw
+      # The repo itself — the server runs out of /app and uses git ops here
+      # for sync (commit / push / pull). If you'd rather use the image's
+      # baked-in copy and skip sync, comment this volume out.
+      - ${HOME}/git/agent-workspace:/app:rw
+      # SSH keys for git remotes. Read-only.
+      - ${HOME}/.ssh:/root/.ssh:ro
+    restart: unless-stopped

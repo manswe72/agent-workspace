@@ -1,0 +1,32 @@
+# bash completion for claude-worktrees-server
+# Installed by setup.sh into ~/.local/share/bash-completion/completions/.
+_claude_worktrees_server() {
+  local cur prev opts
+  COMPREPLY=()
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  prev="${COMP_WORDS[COMP_CWORD-1]}"
+  opts="--worktrees --port --bind --behind --no-open \
+        --sync-interval --auto-sync --no-sync \
+        --primaries --no-materialize -h --help"
+
+  case "$prev" in
+    --worktrees|--primaries)
+      compopt -o dirnames 2>/dev/null
+      COMPREPLY=( $(compgen -d -- "$cur") )
+      return 0
+      ;;
+    --port|--behind|--sync-interval)
+      # numeric — nothing useful to suggest
+      return 0
+      ;;
+    --bind)
+      COMPREPLY=( $(compgen -W "127.0.0.1 0.0.0.0 localhost" -- "$cur") )
+      return 0
+      ;;
+  esac
+
+  if [[ "$cur" == -* ]]; then
+    COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
+  fi
+}
+complete -F _claude_worktrees_server claude-worktrees-server
