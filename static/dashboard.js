@@ -5734,14 +5734,19 @@
   // whole tracked set) is one click. The repo list comes from the
   // /api/github/config payload — same source as the Profile editor.
   function openAddWorkspaceDialog(wsName, issueObj) {
+    // align-items: flex-start on the backdrop so the small modal
+    // doesn't stretch to viewport height (the inherited .logs-modal
+    // styling assumes lots of content). The existing modals override
+    // implicitly because they fill the area — ours doesn't.
     const backdrop = h('div', { class: 'logs-modal-backdrop',
+      style: { alignItems: 'flex-start' },
       onclick: (e) => { if (e.target === backdrop) backdrop.remove(); } });
     const checkboxesHost = h('div', { class: 'github-pickrepos-list' },
       h('span', { class: 'muted' }, t('github.loading')));
     const submitBtn = h('button', { class: 'btn btn-primary',
       disabled: '', onclick: () => doCreate() }, t('github.create-with', { n: 0 }));
     const modal = h('div', { class: 'logs-modal',
-      style: { maxWidth: '480px' },
+      style: { maxWidth: '480px', height: 'auto', alignSelf: 'flex-start' },
       role: 'dialog', onclick: (e) => e.stopPropagation() },
       h('div', { class: 'logs-modal-head' },
         h('strong', {}, t('github.pick-repos', { number: issueObj.number })),
@@ -7455,38 +7460,51 @@
   // is created from `base_branch` (default "master"). The dialog is
   // intentionally minimal — issue key, base branch, repo checkboxes,
   // submit. Per-repo results render inline once the round-trip lands.
-  // Default repos when the user hasn't set an `expected-repos`
-  // preference yet. Mirrors EXPECTED_REPOS in agent_workspace.py.
-  const ADD_ISSUE_REPOS_DEFAULT = ['core', 'bssweb', 'doc'];
-
-  // Current effective repo list — read from the synced preference,
-  // falling back to the default. Called each time the Add-issue
-  // dialog opens so the user's edits from the Advanced tab take
-  // effect without a full page reload.
+  // Current effective repo list — derived from the `github-repos`
+  // preference. Each "owner/repo" contributes its repo-name. Called
+  // each time the Add-workspace dialog opens so edits from
+  // Profile → Dashboard → GitHub repos take effect immediately
+  // without a page reload. Empty array when the user hasn't
+  // configured any GitHub repos.
   function currentExpectedRepos() {
-    const raw = (localStorage.getItem('expected-repos') || '').trim();
-    if (!raw) return ADD_ISSUE_REPOS_DEFAULT.slice();
+    const ghPrefs = (githubModalPrefs || {})['github-repos'];
+    const raw = Array.isArray(ghPrefs)
+      ? ghPrefs
+      : (typeof ghPrefs === 'string'
+          ? ghPrefs.split(',')
+          : []);
     const seen = new Set();
     const out = [];
-    for (const part of raw.split(',')) {
-      const name = part.trim();
+    for (const slug of raw) {
+      const trimmed = String(slug).trim();
+      if (!trimmed || !trimmed.includes('/')) continue;
+      const name = trimmed.split('/').pop();
       if (!name || seen.has(name)) continue;
       seen.add(name);
       out.push(name);
     }
-    return out.length ? out : ADD_ISSUE_REPOS_DEFAULT.slice();
+    return out;
   }
 
-  function openAddIssueDialog(prefillIssue, onDone) {
+  async function openAddIssueDialog(prefillIssue, onDone) {
     document.getElementById('add-issue-dialog')?.remove();
+    // Pull the latest github-repos preference each time the dialog
+    // opens so the repo checkbox list always matches the user's
+    // current setup (no stale cache from a long-open page).
+    try {
+      const r = await fetch('/api/github/config', { cache: 'no-store' });
+      const d = await r.json();
+      githubModalPrefs = githubModalPrefs || {};
+      githubModalPrefs['github-repos'] = d.repos || [];
+    } catch (_) {}
     const issueInput = h('input', {
       type: 'text', class: 'add-issue-input', autocomplete: 'off',
-      placeholder: 'BSS-12345',
+      placeholder: '42-fix-auth',
       value: prefillIssue || '',
     });
     const baseInput = h('input', {
       type: 'text', class: 'add-issue-input', autocomplete: 'off',
-      placeholder: 'master', value: 'master',
+      placeholder: 'main', value: 'main',
     });
     const repoBoxes = currentExpectedRepos().map(repo => {
       const cb = h('input', {

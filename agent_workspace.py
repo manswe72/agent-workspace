@@ -571,6 +571,33 @@ _pricing.configure_logger(log_event)
 _github.configure_logger(log_event)
 
 
+def _model_belongs_to_provider(model: str, provider_id: str) -> bool:
+    """True iff the given model id is in the named provider's
+    model_pricing() keys. Used to ignore a stale `workspace-model-<id>`
+    preference after the user switched the workspace's agent CLI —
+    Codex's `codex:gpt-5` shouldn't get passed to `claude --model …`,
+    and vice versa.
+    """
+    if not model:
+        return False
+    try:
+        from awlib import providers as _providers
+        p = _providers.get(provider_id)
+    except Exception:  # noqa: BLE001
+        return True   # never block a launch on a registry lookup failure
+    pricing = {}
+    try:
+        pricing = p.model_pricing() or {}
+    except Exception:  # noqa: BLE001
+        pass
+    # When the provider exposes no priced model list (Aider, Crush),
+    # we have no way to validate — trust the user-set model. The CLI
+    # itself surfaces its own error message if it doesn't recognize.
+    if not pricing:
+        return True
+    return model in pricing
+
+
 def _refresh_github_config() -> None:
     """Pull the repo list out of the user's preferences and hand it
     to the github module. Called on startup + after every preferences
@@ -5469,11 +5496,12 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                 if ws_provider:
                     provider_pref = ws_provider
                 ws_model = (prefs.get(f"workspace-model-{issue}") or "").strip()
-                if ws_model:
+                if ws_model and _model_belongs_to_provider(ws_model, provider_pref):
                     model_pref = ws_model
                 elif issue == "__agent__":
                     raw = prefs.get("general-agent-model") or ""
-                    if raw and raw != "default":
+                    if raw and raw != "default" \
+                            and _model_belongs_to_provider(raw, provider_pref):
                         model_pref = raw
             except Exception:  # noqa: BLE001
                 pass
