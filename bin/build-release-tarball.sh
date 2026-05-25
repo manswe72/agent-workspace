@@ -57,6 +57,7 @@ FILES=(
   bin
   completions
   install.sh
+  setup.sh
   VERSION
   README.md
   INSTALL.md
