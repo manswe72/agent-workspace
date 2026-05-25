@@ -4732,7 +4732,9 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                           "installed": p.is_installed(),
                           "supports_mcp": p.supports_mcp(),
                           "auto_registers_mcp": p.auto_registers_mcp(),
-                          "supports_hooks": p.supports_hooks()}
+                          "supports_hooks": p.supports_hooks(),
+                          "default_model": p.default_model(),
+                          "models": list(p.model_pricing().keys())}
                         for p in _providers.all_providers()
                     ],
                 })

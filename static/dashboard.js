@@ -193,6 +193,9 @@
       'github.col.actions':     'Actions',
       'github.has-workspace':   '✓ exists',
       'github.no-workspace':    '—',
+      'github.set-name':        'Set display name',
+      'github.clear-name':      'Clear display name',
+      'github.name-prompt':     'Friendly name for {workspace} (used in MCP `send_message(to=...)`)',
       'github.action.add':      '+ Add',
       'github.action.add-tip':  'Create a worktree {name} from this issue',
       'github.action.remove':   '🗑 Remove',
@@ -577,6 +580,11 @@
       'profile.agent.missing':  'not installed',
       'profile.agent.mcp':      'MCP',
       'profile.agent.hooks':    'hooks',
+      'profile.tab.model':      'Model',
+      'profile.help.model':     'Model passed via `--model …` when the 🤖 Agent button opens a terminal for the currently-selected provider. Default = let the CLI pick.',
+      'profile.label.model':    'Model',
+      'profile.label.general-agent-model.generic': 'General Agent model',
+      'profile.help.general-agent-model.generic': 'Override the model for the pinned General Agent tab. Inherits the default above unless you pick one here.',
       'profile.tab.claude-model': 'Claude model',
       'profile.tab.theme':      'Theme',
       'profile.tab.language':   'Language',
@@ -1088,6 +1096,11 @@
       'profile.agent.missing':  'saknas',
       'profile.agent.mcp':      'MCP',
       'profile.agent.hooks':    'hooks',
+      'profile.tab.model':      'Modell',
+      'profile.help.model':     'Modell som skickas via `--model …` när 🤖 Agent-knappen startar en terminal för aktuell provider. Tom = låt CLI:t välja.',
+      'profile.label.model':    'Modell',
+      'profile.label.general-agent-model.generic': 'Modell för General Agent',
+      'profile.help.general-agent-model.generic': 'Sätt en egen modell för den fasta General Agent-fliken. Ärver standardvärdet ovan om du inte väljer här.',
       'profile.tab.claude-model': 'Claude-modell',
       'profile.tab.theme':      'Tema',
       'profile.tab.language':   'Språk',
@@ -2000,7 +2013,11 @@
     );
     fetch('/api/providers', { cache: 'no-store' })
       .then(r => r.json())
-      .then(d => renderAgentProviderList(d.providers || []))
+      .then(d => {
+        // Cache for the tabs-visibility check below.
+        window.__providersCache = d.providers || [];
+        renderAgentProviderList(d.providers || []);
+      })
       .catch(() => {
         const host = panel.querySelector('#agent-provider-list');
         if (host) host.replaceChildren(
@@ -2008,6 +2025,15 @@
       });
     return panel;
   }
+
+  // Kick off a providers fetch on page load so the Model tab's
+  // visibility is correct on the FIRST popover open, not just after
+  // the user visits the Agent tab. Idempotent — re-fetches every
+  // page load (cheap; no auth, single endpoint).
+  fetch('/api/providers', { cache: 'no-store' })
+    .then(r => r.json())
+    .then(d => { window.__providersCache = d.providers || []; })
+    .catch(() => {});
 
   function renderAgentProviderList(providers) {
     const host = document.getElementById('agent-provider-list');
@@ -2069,8 +2095,85 @@
       .catch(() => {});
   }
 
-  // Claude-model picker lives on its own tab so the radio list with
-  // three multi-line rows doesn't crowd the Dashboard tab.
+  // Provider-aware Model panel. For Claude Code we still use the
+  // hand-curated CLAUDE_MODEL_CHOICES (nice multi-line labels with
+  // recommended-flag); for every other provider we render the bare
+  // list from `/api/providers`. Each provider gets its own pref key
+  // (`agent-model.<provider-id>`) so switching the active CLI
+  // restores that CLI's last-chosen model independently.
+  function buildProfileModelPanel(provider) {
+    if (!provider) {
+      return h('div', { class: 'profile-tab-content profile-help' },
+        'No model picker — the active provider exposes no priced model list.');
+    }
+    if (provider.id === 'claude') {
+      return buildProfileClaudeModelPanel();
+    }
+    const prefKey = `agent-model.${provider.id}`;
+    const current = (prefs.getItem(prefKey) || '').trim();
+    const choices = [
+      { id: '', short: 'Use default',
+        summary: 'No --model flag', tagline: provider.default_model
+          ? `CLI default: ${provider.default_model}` : '' },
+      ...provider.models.map(m => ({
+        id: m, short: m.split(':').slice(-1)[0],
+        summary: m, tagline: '',
+      })),
+    ];
+    function mkRow(c) {
+      return h('label', { class: 'claude-model-option' },
+        h('input', {
+          type: 'radio', name: 'agent-model',
+          value: c.id,
+          checked: (c.id === current) ? '' : null,
+          onchange: async (e) => {
+            if (!e.target.checked) return;
+            const v = c.id;
+            if (v) prefs.setItem(prefKey, v);
+            else prefs.removeItem(prefKey);
+            try {
+              await fetch('/api/preferences', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  preferences: { [prefKey]: v || null },
+                }),
+              });
+            } catch (_) {}
+          },
+        }),
+        h('div', { class: 'claude-model-option-body' },
+          h('div', { class: 'claude-model-option-head' },
+            h('strong', {}, c.short),
+            c.summary
+              ? h('span', { class: 'claude-model-summary' },
+                  ' · ' + c.summary)
+              : null,
+          ),
+          c.tagline
+            ? h('div', { class: 'claude-model-tagline' }, c.tagline)
+            : null,
+        ),
+      );
+    }
+    return h('div', { class: 'profile-tab-content' },
+      h('div', { class: 'profile-section' },
+        h('div', { class: 'profile-group' },
+          h('div', { class: 'profile-section-title' },
+            `${provider.display_name} · ${t('profile.label.model')}`),
+          h('div', { class: 'profile-row profile-row-stacked' },
+            h('div', { class: 'claude-model-options' },
+              ...choices.map(mkRow)),
+          ),
+          h('div', { class: 'profile-help' }, t('profile.help.model')),
+        ),
+      ),
+    );
+  }
+
+  // Claude-model picker — kept as its own builder because the
+  // hand-curated radio list with recommended flags is worth more
+  // than the bare-keys list other providers fall back to.
   function buildProfileClaudeModelPanel() {
     // General Agent override: choices = CLAUDE_MODEL_CHOICES + a
     // synthetic "Inherit default" row that maps to the empty pref.
@@ -2908,14 +3011,23 @@
     const avatarStyle = { background: `hsl(${hue}, 55%, 45%)` };
     const meta = dashboardMeta || {};
 
+    // Active provider drives whether the Model tab appears at all,
+    // and which model list it renders. Cached on window so the tab
+    // bar re-renders synchronously with the current value. Defaults
+    // to claude until /api/providers responds.
+    const activeProviderId = (prefs.getItem('default-provider') || 'claude').trim();
+    const activeProvider = (window.__providersCache || []).find(p => p.id === activeProviderId);
+    const showModelTab = (activeProvider?.models?.length || 0) > 0;
     const tabs = [
       { id: 'dashboard',    label: t('profile.tab.dashboard'),
         build: () => buildProfileDashboardPanel(meta, editors),
         onShow: () => renderGithubReposEditor() },
       { id: 'agent',        label: t('profile.tab.agent'),
         build: () => buildProfileAgentPanel() },
-      { id: 'claude-model', label: t('profile.tab.claude-model'),
-        build: () => buildProfileClaudeModelPanel() },
+      ...(showModelTab ? [
+        { id: 'model', label: t('profile.tab.model'),
+          build: () => buildProfileModelPanel(activeProvider) },
+      ] : []),
       { id: 'theme',        label: t('profile.tab.theme'),
         build: () => buildProfileThemePanel() },
       { id: 'language',     label: t('profile.tab.language'),
@@ -5350,15 +5462,22 @@
 
   function githubKeyHandler(e) { if (e.key === 'Escape') closeGithubModal(); }
 
+  // Server-side preferences cache used by the GitHub modal so we can
+  // render display names (workspace-names pref) inline. Refreshed on
+  // every loadGithub() so a rename in another tab shows up on Refresh.
+  let githubModalPrefs = {};
+
   async function loadGithub(force) {
     const btn = document.getElementById('github-refresh');
     if (btn) btn.disabled = true;
     try {
       const qs = force ? '?force=1' : '';
-      const [issuesR, prsR] = await Promise.all([
+      const [issuesR, prsR, prefsR] = await Promise.all([
         fetch('/api/github/issues' + qs, { cache: 'no-store' }).then(r => r.json()),
         fetch('/api/github/prs' + qs, { cache: 'no-store' }).then(r => r.json()),
+        fetch('/api/preferences', { cache: 'no-store' }).then(r => r.json()),
       ]);
+      githubModalPrefs = (prefsR && prefsR.preferences) || {};
       renderGithubModal(issuesR, prsR);
     } catch (err) {
       const body = document.getElementById('github-body');
@@ -5367,6 +5486,62 @@
     } finally {
       if (btn) btn.disabled = false;
     }
+  }
+
+  // Cell builder for the Workspace column. When a display name is set
+  // for the workspace id, shows "<name>  <muted id>"; otherwise shows
+  // the id. A ✏ button opens a window.prompt to set / clear the name
+  // (POSTs to /api/preferences with the updated workspace-names map).
+  // Empty cell for issues without an existing workspace folder.
+  function workspaceCell(existingId) {
+    if (!existingId) {
+      return t('github.no-workspace');
+    }
+    const namesMap = (githubModalPrefs['workspace-names'] || {});
+    const display = (namesMap[existingId] || '').trim();
+    const editBtn = h('button', {
+      class: 'btn btn-inline workspace-name-edit',
+      title: display
+        ? t('github.clear-name')
+        : t('github.set-name'),
+      onclick: async (e) => {
+        e.preventDefault();
+        const current = (namesMap[existingId] || '');
+        const next = window.prompt(
+          t('github.name-prompt', { workspace: existingId }),
+          current,
+        );
+        if (next === null) return;            // cancel
+        const trimmed = next.trim();
+        const newMap = Object.assign({}, namesMap);
+        if (trimmed) newMap[existingId] = trimmed;
+        else delete newMap[existingId];
+        try {
+          await fetch('/api/preferences', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              preferences: { 'workspace-names': newMap },
+            }),
+          });
+          githubModalPrefs['workspace-names'] = newMap;
+          loadGithub(false);
+        } catch (err) {
+          showToast('error', `rename failed: ${err}`);
+        }
+      },
+    }, '✏');
+    if (display) {
+      return h('span', { class: 'workspace-cell' },
+        h('a', { href: '#' + existingId, onclick: closeGithubModal },
+          display),
+        h('span', { class: 'muted workspace-cell-id' }, existingId),
+        editBtn);
+    }
+    return h('span', { class: 'workspace-cell' },
+      h('a', { href: '#' + existingId, onclick: closeGithubModal },
+        existingId),
+      editBtn);
   }
 
   function renderGithubModal(issuesR, prsR) {
@@ -5437,11 +5612,7 @@
           h('td', {},
             h('span', { class: `github-pill github-pill-${it.state || 'open'}${it.isDraft ? ' github-pill-draft' : ''}` },
               it.state + (it.isDraft ? ' (draft)' : ''))),
-          h('td', {},
-            existing
-              ? h('a', { href: '#' + existing,
-                          onclick: closeGithubModal }, existing)
-              : t('github.no-workspace')),
+          h('td', {}, workspaceCell(existing)),
         ];
         if (!isPRTable) {
           tds.push(githubModelCell(existing, it));

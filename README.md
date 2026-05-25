@@ -22,19 +22,22 @@ missing binaries are greyed out until you install the tool.
 
 | Provider | Binary | Install | Resume in cwd | MCP | Hooks |
 |---|---|---|---|---|---|
-| Claude Code (Anthropic) | `claude` | `npm install -g @anthropic-ai/claude-code` | `claude --continue` | ✓ | ✓ |
-| OpenAI Codex CLI | `codex` | `npm install -g @openai/codex` | `codex resume --last` | — | — |
+| Claude Code (Anthropic) | `claude` | `npm install -g @anthropic-ai/claude-code` | `claude --continue` | ✓ auto | ✓ |
+| OpenAI Codex CLI (open source) | `codex` | `npm install -g @openai/codex` | `codex resume --last` | ✓ auto | — |
 | Aider (open source) | `aider` | `pipx install aider-chat` | auto (`.aider.chat.history.md`) | — | — |
-| Gemini CLI (open source) | `gemini` | `npm install -g @google/gemini-cli` | `/chat resume <tag>` (interactive) | — | — |
-| Cursor Agent | `cursor-agent` | `curl https://cursor.com/install -fsS \| bash` | `cursor-agent resume` | — | — |
+| Gemini CLI (open source) | `gemini` | `npm install -g @google/gemini-cli` | `/chat resume <tag>` (interactive) | manual | — |
+| Cursor Agent | `cursor-agent` | `curl https://cursor.com/install -fsS \| bash` | `cursor-agent resume` | ✓ auto | — |
 | Crush (Charm, open source) | `crush` | `go install github.com/charmbracelet/crush/cmd/crush@latest` | per-cwd, interactive | — | — |
 
 The launcher gives every provider the same workspace context (cwd,
 branch, system prompt) and tracks session liveness via either the
 provider's own session log (Claude Code) or a marker file the launcher
-touches every 30 s (everything else). The MCP-based agent-to-agent
-mailbox and the event-hook → `/api/events` route only fire on the
-Claude Code provider — see *Claude Code provider* below.
+touches every 30 s (everything else). The event-hook →
+`/api/events` route only fires on the Claude Code provider (it
+depends on `~/.claude/settings.json` hooks, which the others don't
+have an equivalent for). MCP is broader: see *Claude Code provider*
+below for the agent-to-agent messaging tools, and *OpenAI Codex CLI*
+below for the auto-wiring of those same tools into Codex sessions.
 
 ## GitHub integration
 
@@ -441,6 +444,91 @@ Agent-to-agent messaging**. When off, new agents launch with no
 State lives in the SQLite `agent_messages` table; messages are local
 to one dashboard instance and are not synced across machines.
 
+## OpenAI Codex CLI provider
+
+`codex` is the open-source CLI for OpenAI's coding models. The
+dashboard launches it the same way it launches Claude Code (the
+🤖 Agent button + the **Profile → Agent CLI → OpenAI Codex CLI**
+radio); on top of that it auto-wires the agent-to-agent MCP mailbox
+so Codex sessions can talk to Claude / Cursor / each other.
+
+### Install + auth
+
+```bash
+npm install -g @openai/codex
+export OPENAI_API_KEY=sk-...          # in your shell rc
+codex --version                        # confirm
+```
+
+After install, refresh the dashboard and switch **Profile → Agent CLI**
+to **OpenAI Codex CLI**. The row's "installed" pill turns green; the
+🤖 Agent button now launches `codex` in the workspace cwd.
+
+### Resume / session storage
+
+`codex resume --last` resumes the most recent session in the
+current workspace folder. Codex stores its own session metadata
+under `~/.codex/sessions/` — the dashboard doesn't parse that file
+format (yet), so the per-workspace Agent panel shows the simpler
+"active / idle / closed" state derived from the launcher's
+30-second marker file. Token totals and per-prompt cost from a
+running Codex session aren't surfaced; you can still see them with
+`codex` built-in commands inside the terminal.
+
+### MCP mailbox auto-wiring
+
+On every launch the dashboard merges this block into
+`~/.codex/config.toml`:
+
+```toml
+[mcp_servers.agent-workspace]
+url = "http://127.0.0.1:8766/mcp"
+env_http_headers = { "X-Agent-Id" = "AGENT_WORKSPACE_AGENT_ID" }
+approval_policy = "never"
+```
+
+`env_http_headers` is Codex's mechanism for "read this env var at
+launch and use it as the header value" — the dashboard's pty wrapper
+exports `AGENT_WORKSPACE_AGENT_ID=<workspace-id>` per shell, so the
+MCP server sees the right identity without a per-launch config
+rewrite. `approval_policy = "never"` pre-approves the four mailbox
+tools (`send_message`, `read_messages`, `request_review`,
+`list_agents`) so Codex doesn't pause for a permission prompt every
+time it pokes the mailbox.
+
+Verify the wiring with:
+
+```bash
+codex mcp get agent-workspace
+# Should print: transport: streamable_http
+#               url: http://127.0.0.1:<port>/mcp
+#               env_http_headers: X-Agent-Id=AGENT_WORKSPACE_AGENT_ID
+```
+
+The dashboard's `/mcp` endpoint accepts agent identity from EITHER
+`?agent=<id>` (Claude Code's per-launch config) OR `X-Agent-Id`
+header (everyone else), so the same four mailbox tools work across
+providers — a Codex session can `send_message(to="Alice")` and an
+attached Claude session sees the message in its inbox.
+
+### Manual MCP wiring (Cursor / Gemini)
+
+Cursor Agent's wiring is automatic too — the dashboard writes
+`~/.cursor/mcp.json` with the same shape (URL + `${AGENT_WORKSPACE_AGENT_ID}`
+header placeholder). Gemini CLI is not auto-wired yet; if you want
+the mailbox there, paste this into `~/.gemini/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "agent-workspace": {
+      "httpUrl": "http://127.0.0.1:8766/mcp",
+      "headers": { "X-Agent-Id": "${AGENT_WORKSPACE_AGENT_ID}" }
+    }
+  }
+}
+```
+
 ## Agent console UX (quick messages + drag-drop)
 
 The inline agent terminal (per-issue + General Agent) has two
@@ -681,6 +769,85 @@ See `AGENTS.md` for mount semantics. The `🖥 Open in terminal tabs` button
 and the `↗ Open in editor` buttons don't work inside the container (no
 GUI binaries) — run `bin/agent-worktrees-server` on the host directly
 when you want those.
+
+## Security: pin agent CLI versions
+
+`agent-workspace` itself ships **zero runtime dependencies** — the
+server is single-file Python stdlib only. There's no `requirements.txt`,
+no `package.json`, nothing for `pip` / `npm` to pull on first run.
+That side of the supply chain is deliberately small.
+
+The **agent CLIs** you install are a different story. Each one's
+upstream releases freely (Claude Code multiple times a week, Codex
+weekly, etc.) and several of them quietly self-update on launch.
+Some teams want explicit control over when those move. Recommended
+pattern: pin a known-good version + disable each tool's auto-updater.
+
+### npm-installed CLIs (Claude Code, Codex, Gemini)
+
+```bash
+# Pin on first install (record the version you want)
+npm install -g @anthropic-ai/claude-code@2.1.5
+npm install -g @openai/codex@0.133.0
+npm install -g @google/gemini-cli@0.4.2
+
+# Lock npm itself to exact-version semantics for any global install
+npm config set save-exact true
+```
+
+Disable per-CLI auto-update (where supported):
+
+```bash
+# Claude Code
+claude config set -g autoUpdates false
+
+# Codex CLI — no built-in updater, but if you've installed it via
+# `npx` it'll pull `@latest` every launch. Switch to a pinned
+# global install per the line above.
+
+# Gemini CLI — auto-update flag is in ~/.gemini/settings.json:
+#   { "autoUpdate": false, ... }
+```
+
+Upgrade is then a deliberate two-line action:
+
+```bash
+npm view @anthropic-ai/claude-code version           # see what's out
+npm install -g @anthropic-ai/claude-code@<version>   # pin to the new one
+```
+
+### pipx-installed CLIs (Aider)
+
+```bash
+# Pin on first install
+pipx install aider-chat==0.74.0
+
+# pipx never auto-upgrades the binary it manages — you have to ask
+pipx upgrade aider-chat                  # upgrades to the latest stable
+pipx install --force aider-chat==<ver>   # pin to a specific version
+```
+
+### Other CLIs
+
+- **Cursor Agent** — installed via the upstream shell script; that
+  script always grabs the latest. Re-run it deliberately to upgrade.
+- **Crush** — `go install …@<version>` pins by ref. Re-run the same
+  command with a new tag to upgrade.
+
+### Audit / inventory
+
+Quick "what's currently installed" check:
+
+```bash
+npm ls -g --depth=0 2>/dev/null | grep -E 'claude-code|codex|gemini-cli'
+pipx list 2>/dev/null | grep -i aider
+cursor-agent --version 2>/dev/null
+crush --version 2>/dev/null
+```
+
+The dashboard's **Profile → Agent CLI** tab surfaces the binary path
+for each detected provider, so you can cross-check against your
+recorded pins at a glance.
 
 ## Troubleshooting
 
