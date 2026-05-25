@@ -24,7 +24,7 @@ title: Agent Workspace
 summary: Local dashboard for coding-agent CLI worktrees
 description: |
   Agent Workspace is a small local HTTP dashboard that watches every
-  directory under ~/git/worktrees/<workspace>/<repo>, surfaces a
+  directory under ~/github/worktrees/<workspace>/<repo>, surfaces a
   GitHub-style activity heatmap of your commits, and lets you launch
   a coding-agent CLI in a terminal tab — Claude Code, OpenAI Codex,
   Aider, Gemini CLI, Cursor Agent, or Crush.

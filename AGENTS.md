@@ -1,7 +1,7 @@
 # Setting up `agent-workspace`
 
 A small local HTTP dashboard that shows the state of every
-`~/git/worktrees/<issue>/<repo>` and surfaces a GitHub-style activity heatmap
+`~/github/worktrees/<issue>/<repo>` and surfaces a GitHub-style activity heatmap
 of *your* commits. Status is collected on demand; activity is persisted to
 SQLite and (optionally) synced across machines via this very repo.
 
@@ -32,10 +32,10 @@ agent should restart this server.
 ## One-machine setup
 
 ```bash
-git clone <agent-workspace-url> ~/git/agent-workspace
-~/git/agent-workspace/bin/agent-worktrees-server
+git clone <agent-workspace-url> ~/github/agent-workspace
+~/github/agent-workspace/bin/agent-worktrees-server
 # or:
-python3 ~/git/agent-workspace/agent_workspace.py
+python3 ~/github/agent-workspace/agent_workspace.py
 ```
 
 The server prints its URL (default `http://127.0.0.1:8765`) and opens your
@@ -43,7 +43,7 @@ default browser to it. CLI flags:
 
 | Flag | Default | Purpose |
 |---|---|---|
-| `--worktrees PATH` | `~/git/worktrees` | Root that contains one dir per active issue |
+| `--worktrees PATH` | `~/github/worktrees` | Root that contains one dir per active issue |
 | `--port N` | `8765` | HTTP port |
 | `--behind N` | `50` | Warn when a branch is more than N commits behind upstream |
 | `--no-open` | — | Don't pop a browser tab on startup |
@@ -85,14 +85,14 @@ On every auto-sync tick (default every 5 min) the server:
 Manual one-shot sync (server doesn't have to be running):
 
 ```bash
-~/git/agent-workspace/bin/agent-workspace-sync
+~/github/agent-workspace/bin/agent-workspace-sync
 ```
 
 ## New machine
 
 ```bash
-git clone <agent-workspace-url> ~/git/agent-workspace
-python3 ~/git/agent-workspace/agent_workspace.py --worktrees /elsewhere/worktrees
+git clone <agent-workspace-url> ~/github/agent-workspace
+python3 ~/github/agent-workspace/agent_workspace.py --worktrees /elsewhere/worktrees
 ```
 
 On startup the server hydrates the local SQLite cache from every `data/*/`
@@ -127,9 +127,9 @@ Or one-shot without compose:
 ```bash
 podman run -d --name agent-workspace \
   -p 127.0.0.1:8765:8765 \
-  -v "$HOME/git/worktrees:/worktrees:rw" \
+  -v "$HOME/github/worktrees:/worktrees:rw" \
   -v "$HOME/git:/primaries:rw" \
-  -v "$HOME/git/agent-workspace:/app:rw" \
+  -v "$HOME/github/agent-workspace:/app:rw" \
   -v "$HOME/.ssh:/root/.ssh:ro" \
   agent-workspace:latest
 ```
@@ -138,9 +138,9 @@ Mount semantics:
 
 | Host path | Container path | Why |
 |---|---|---|
-| `~/git/worktrees` | `/worktrees` (`rw`) | What the dashboard reads. Read-write so the server can `git worktree add` to materialize missing entries. |
+| `~/github/worktrees` | `/worktrees` (`rw`) | What the dashboard reads. Read-write so the server can `git worktree add` to materialize missing entries. |
 | `~/git` | `/primaries` (`rw`) | Where the primary repo checkouts live (`core`, `bssweb`, `doc`, …). `rw` because `git fetch` and `git worktree add` write inside `.git/`. |
-| `~/git/agent-workspace` | `/app` (`rw`) | The repo whose `data/` is the sync mirror. Mounted so commits/pushes flow to the host's checkout. |
+| `~/github/agent-workspace` | `/app` (`rw`) | The repo whose `data/` is the sync mirror. Mounted so commits/pushes flow to the host's checkout. |
 | `~/.ssh` | `/root/.ssh` (`ro`) | SSH keys for `ssh://` git remotes. |
 
 Caveats:

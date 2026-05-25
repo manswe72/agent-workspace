@@ -173,6 +173,31 @@
       'toolbar.refresh-now':    'Refresh now',
       'toolbar.sync-now':       '⇅ Sync now',
       'toolbar.week-summary':   '📅 Week summary',
+      'toolbar.github':         '🐙 GitHub',
+      'tip.github':             'Open issues / PRs assigned to you in the configured GitHub repositories',
+      'github.title':           '🐙 GitHub · open issues + PRs',
+      'github.refresh':         '↻ Refresh',
+      'github.close':           '✕ Close',
+      'github.loading':         'loading…',
+      'github.empty-issues':    'No open issues assigned to you.',
+      'github.empty-prs':       'No open PRs you authored.',
+      'github.not-configured':  'No GitHub repos configured. Set the `github-repos` preference to a list of "owner/repo" strings.',
+      'github.section.issues':  'Issues assigned to you',
+      'github.section.prs':     'Open PRs you authored',
+      'github.col.repo':        'Repo',
+      'github.col.number':      '#',
+      'github.col.title':       'Title',
+      'github.col.state':       'State',
+      'github.col.workspace':   'Workspace',
+      'github.col.model':       'Model',
+      'github.col.actions':     'Actions',
+      'github.has-workspace':   '✓ exists',
+      'github.no-workspace':    '—',
+      'github.action.add':      '+ Add',
+      'github.action.add-tip':  'Create a worktree {name} from this issue',
+      'github.action.remove':   '🗑 Remove',
+      'github.action.remove-tip':'Remove the worktree {name}',
+      'github.model.inherit':   'Use default',
       'toolbar.agent-events':   '🔔 Agent events',
       'toolbar.add-issue':      '+ Add issue',
       'toolbar.pinned-only':    '📌 Pinned only',
@@ -238,7 +263,7 @@
       'help.shortcut.help':     'Open this help overlay',
       'help.shortcut.dismiss':  'Close the topmost overlay (modals, toasts, popovers)',
       'help.shortcut.term-search': 'Search terminal output (when terminal is focused)',
-      'help.feat.tabs':         'Tabs across the top: one per ~/git/worktrees/<issue>/. The ⓘ icon shows a per-repo ↓↑ table on hover.',
+      'help.feat.tabs':         'Tabs across the top: one per {root}/<issue>/. The ⓘ icon shows a per-repo ↓↑ table on hover.',
       'help.feat.bell':         '🔔 Agent events: per-tab badge counts unread events. Click the badge for a per-issue modal; the toolbar 🔔 button shows everything.',
       'help.feat.notes':        '📝 Notes per issue: lightweight todo / done / not-done. Inline-editable, sortable, status-flippable.',
       'help.feat.console':      '🤖 Agent opens the issue in a new gnome-terminal tab with `claude --continue`. ↗ Open opens the issue dir in the editor.',
@@ -437,10 +462,10 @@
       'tip.week-summary':       "Show this week's commit + token summary",
       'tip.agent-events':       'All recent events posted by Claude Code hooks',
       'issue.open-issue':       '↗ Open',
-      'tip.open-issue':         'Open the issue\'s worktree directory (~/git/worktrees/<issue>/) so all repos sit side-by-side.',
+      'tip.open-issue':         'Open the issue\'s worktree directory ({root}/<issue>/) so all repos sit side-by-side.',
       'toolbar.notes':          '📝 Notes',
       'tip.notes':              'All notes across all issues, with filters',
-      'tip.add-issue':          'Create a new worktree under ~/git/worktrees/<issue>/ for one or more repos',
+      'tip.add-issue':          'Create a new worktree under {root}/<issue>/ for one or more repos',
       'tip.add-issue.cloning':  'Wait for primary repos to finish cloning: {repos}',
       'issue.subtab.branches':  'Branches',
       'issue.subtab.agent':     'Agent',
@@ -546,6 +571,12 @@
       'stat.behind':            'Branches >{n} behind',
       // Profile popover
       'profile.tab.dashboard':  'Dashboard',
+      'profile.tab.agent':      'Agent CLI',
+      'profile.agent.intro':    'Which coding-agent CLI the 🤖 Agent button launches. The provider must be installed on PATH — disabled rows have no binary detected.',
+      'profile.agent.installed':'installed',
+      'profile.agent.missing':  'not installed',
+      'profile.agent.mcp':      'MCP',
+      'profile.agent.hooks':    'hooks',
       'profile.tab.claude-model': 'Claude model',
       'profile.tab.theme':      'Theme',
       'profile.tab.language':   'Language',
@@ -645,8 +676,14 @@
       'mcp.kind.message':            'message',
       'mcp.kind.review_request':     'review request',
       'mcp.kind.review_response':    'review response',
-      'profile.label.expected-repos': 'Expected repos',
-      'profile.help.expected-repos': 'Comma-separated list of repo names the dashboard expects under each ~/git/worktrees/<issue>/. Drives the "Not in this worktree" placeholders and the default repo checkboxes on "+ Add issue". Empty = the built-in default (core, bssweb, doc). Synced across machines.',
+      'profile.label.github-repos':  'GitHub repos',
+      'profile.help.github-repos':   'Repositories the dashboard tracks. Each entry is "owner/repo". Drives the issue/PR list, the per-workspace pill, and the default repo set when adding a new workspace.',
+      'github.repos.add':            '+ Add repo',
+      'github.repos.empty':          'No repos configured yet. Add at least one "owner/repo" entry.',
+      'github.repos.bad-format':     'Repo must be "owner/repo".',
+      'github.repos.remove-tip':     'Stop tracking {slug}',
+      'github.pick-repos':           'Clone which repos for #{number}?',
+      'github.create-with':          'Create with {n} repo(s)',
       'profile.help.editor':    'Used when you click a file path in a Working tree list.',
       'profile.help.claude-model': 'Model passed as `claude --model …` when the 🤖 Agent button opens a terminal. Default = let claude pick.',
       'profile.label.general-agent-model':   'General Agent model',
@@ -752,7 +789,7 @@
       'help.shortcut.help':     'Öppna detta hjälpfönster',
       'help.shortcut.dismiss':  'Stäng översta överlägget (modaler, toaster, popovers)',
       'help.shortcut.term-search': 'Sök i terminalutdata (när terminalen är fokuserad)',
-      'help.feat.tabs':         'Flikar längst upp: en per ~/git/worktrees/<issue>/. ⓘ-ikonen visar en per-repo ↓↑-tabell vid hover.',
+      'help.feat.tabs':         'Flikar längst upp: en per {root}/<issue>/. ⓘ-ikonen visar en per-repo ↓↑-tabell vid hover.',
       'help.feat.bell':         '🔔 Agent-händelser: per-flik-räknare för olästa händelser. Klicka på märket för en per-issue-modal; verktygsfältets 🔔-knapp visar allt.',
       'help.feat.notes':        '📝 Anteckningar per issue: lätta todo / klar / inte klar. Redigerbara inline, sorterbara, flippbar status.',
       'help.feat.console':      '🤖 Agent öppnar issuen i ny gnome-terminal-flik med `claude --continue`. ↗ Öppna öppnar issue-katalogen i editorn.',
@@ -926,10 +963,10 @@
       'tip.week-summary':       'Visa denna veckas commit- och token-sammanfattning',
       'tip.agent-events':       'Alla senaste händelser från Claude Code-hookar',
       'issue.open-issue':       '↗ Öppna',
-      'tip.open-issue':         'Öppna issuens worktree-katalog (~/git/worktrees/<issue>/) så att alla repon syns sida-vid-sida.',
+      'tip.open-issue':         'Öppna issuens worktree-katalog ({root}/<issue>/) så att alla repon syns sida-vid-sida.',
       'toolbar.notes':          '📝 Anteckningar',
       'tip.notes':              'Alla anteckningar över alla issues, med filter',
-      'tip.add-issue':          'Skapa en ny worktree under ~/git/worktrees/<issue>/ för ett eller flera repon',
+      'tip.add-issue':          'Skapa en ny worktree under {root}/<issue>/ för ett eller flera repon',
       'tip.add-issue.cloning':  'Vänta tills primärrepon är färdigklonade: {repos}',
       'issue.subtab.branches':  'Brancher',
       'issue.subtab.agent':     'Agent',
@@ -1045,6 +1082,12 @@
       'stat.unpushed':          'Opushade commits',
       'stat.behind':            'Brancher >{n} efter',
       'profile.tab.dashboard':  'Dashboard',
+      'profile.tab.agent':      'Agent-CLI',
+      'profile.agent.intro':    'Vilket coding-agent-CLI som 🤖 Agent-knappen startar. Verktyget måste finnas på PATH — gråa rader saknar binär.',
+      'profile.agent.installed':'installerad',
+      'profile.agent.missing':  'saknas',
+      'profile.agent.mcp':      'MCP',
+      'profile.agent.hooks':    'hooks',
       'profile.tab.claude-model': 'Claude-modell',
       'profile.tab.theme':      'Tema',
       'profile.tab.language':   'Språk',
@@ -1146,8 +1189,14 @@
       'mcp.kind.message':            'meddelande',
       'mcp.kind.review_request':     'granskningsförfrågan',
       'mcp.kind.review_response':    'granskningssvar',
-      'profile.label.expected-repos': 'Förväntade repos',
-      'profile.help.expected-repos': 'Komma­separerad lista över repo-namn dashboarden förväntar sig under varje ~/git/worktrees/<issue>/. Styr "Inte i denna worktree"-platshållarna samt repo-checkboxarna i "+ Lägg till issue". Tom = inbyggd standard (core, bssweb, doc). Synkas mellan maskiner.',
+      'profile.label.github-repos':  'GitHub-repon',
+      'profile.help.github-repos':   'Repositorier dashboarden följer. Varje rad är "owner/repo". Styr issue/PR-listan, per-workspace-pillet och repo-urvalet när en ny workspace skapas.',
+      'github.repos.add':            '+ Lägg till repo',
+      'github.repos.empty':          'Inga repon konfigurerade än. Lägg till minst en "owner/repo".',
+      'github.repos.bad-format':     'Repo måste skrivas som "owner/repo".',
+      'github.repos.remove-tip':     'Sluta följa {slug}',
+      'github.pick-repos':           'Klona vilka repon för #{number}?',
+      'github.create-with':          'Skapa med {n} repon',
       'profile.help.editor':    'Används när du klickar på en filsökväg i en arbetsträd-lista.',
       'profile.help.compact':   'Döljer repo-kortens underrad, worktree-sökväg, storleksetikett samt Branchålder · Senaste Claude · Senaste bygge-foten. Etiketter, synkknappar och tooltips fungerar som vanligt. På som standard.',
       'profile.help.sync':      'Visar Synka nu- och Auto-synk-knappar samt dagsslutpåminnelsen. Av som standard.',
@@ -1197,10 +1246,17 @@
     let s = (TRANSLATIONS[lang] || {})[key]
          || (TRANSLATIONS.en || {})[key]
          || key;
-    if (vars) {
-      for (const [k, v] of Object.entries(vars)) {
-        s = s.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
-      }
+    // Always-available `{root}` placeholder = the worktrees root the
+    // server is actually serving. Lets tooltips / help text show the
+    // real path (e.g. `~/github/worktrees`) instead of a hardcoded
+    // default. Falls back to a sensible literal when state hasn't
+    // landed yet (first render).
+    const merged = Object.assign(
+      { root: (window.__lastState?.worktrees_root || '~/git/worktrees') },
+      vars || {},
+    );
+    for (const [k, v] of Object.entries(merged)) {
+      s = s.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
     }
     return s;
   }
@@ -1826,37 +1882,173 @@
             t('profile.help.mailbox-auto-poll')),
         ),
         h('div', { class: 'profile-group' },
-          h('label', { class: 'profile-row' },
+          h('div', { class: 'profile-row' },
             h('span', { class: 'profile-row-label' },
-              t('profile.label.expected-repos')),
-            h('input', {
-              type: 'text', id: 'expected-repos-input',
-              class: 'expected-repos-input',
-              placeholder: 'core, bssweb, doc',
-              value: (localStorage.getItem('expected-repos') || ''),
-              onchange: (e) => {
-                const seen = new Set();
-                const parts = [];
-                for (const p of (e.target.value || '').split(',')) {
-                  const name = p.trim();
-                  if (!name || seen.has(name)) continue;
-                  seen.add(name);
-                  parts.push(name);
-                }
-                if (parts.length) {
-                  prefs.setItem('expected-repos', parts.join(','));
-                } else {
-                  prefs.removeItem('expected-repos');
-                }
-                refreshAll(true);
-              },
-            }),
+              t('profile.label.github-repos')),
+            h('div', { class: 'github-repos-editor', id: 'github-repos-editor' },
+              h('span', { class: 'muted' }, t('github.loading'))),
           ),
           h('div', { class: 'profile-help' },
-            t('profile.help.expected-repos')),
+            t('profile.help.github-repos')),
         ),
       ),
     );
+  }
+
+  // GitHub repos editor — list-based UI for the `github-repos`
+  // preference. Each row shows "owner/repo" with a remove button; an
+  // input + Add button appends new entries. Persists via
+  // /api/preferences so the server-side github module picks up the
+  // change without a restart.
+  async function renderGithubReposEditor() {
+    const host = document.getElementById('github-repos-editor');
+    if (!host) return;
+    let repos = [];
+    try {
+      const r = await fetch('/api/github/config', { cache: 'no-store' });
+      const d = await r.json();
+      repos = Array.isArray(d.repos) ? d.repos.slice() : [];
+    } catch (_) {}
+
+    function save(nextList) {
+      return fetch('/api/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          preferences: { 'github-repos': nextList },
+        }),
+      }).then(() => refreshAll(true));
+    }
+
+    const rowsHost = h('div', { class: 'github-repos-list' });
+    function paintRows() {
+      const rows = repos.map((slug, i) => h('div', { class: 'github-repos-row' },
+        h('span', { class: 'github-repos-slug' }, slug),
+        h('button', {
+          class: 'btn btn-inline btn-danger',
+          title: t('github.repos.remove-tip', { slug }),
+          onclick: async () => {
+            repos.splice(i, 1);
+            await save(repos);
+            paintRows();
+          },
+        }, '🗑'),
+      ));
+      if (!rows.length) {
+        rowsHost.replaceChildren(h('div', { class: 'muted' },
+          t('github.repos.empty')));
+      } else {
+        rowsHost.replaceChildren(...rows);
+      }
+    }
+    paintRows();
+
+    const input = h('input', {
+      type: 'text', class: 'github-repos-input',
+      placeholder: 'owner/repo',
+    });
+    const addBtn = h('button', {
+      class: 'btn btn-inline btn-primary',
+      onclick: async () => {
+        const v = (input.value || '').trim();
+        if (!v) return;
+        if (!/^[^\s/]+\/[^\s/]+$/.test(v)) {
+          showToast('error', t('github.repos.bad-format'));
+          return;
+        }
+        if (repos.includes(v)) {
+          showToast('warn', `already added: ${v}`);
+          return;
+        }
+        repos.push(v);
+        input.value = '';
+        await save(repos);
+        paintRows();
+      },
+    }, t('github.repos.add'));
+
+    host.replaceChildren(rowsHost,
+      h('div', { class: 'github-repos-add' }, input, addBtn));
+  }
+
+  // Agent-CLI provider picker. Reads /api/providers for the installed
+  // status and lets the user pick which CLI the 🤖 Agent button
+  // launches. Writes to the `default-provider` preference.
+  function buildProfileAgentPanel() {
+    const panel = h('div', { class: 'profile-panel-section' },
+      h('p', { class: 'profile-help' }, t('profile.agent.intro')),
+      h('div', { class: 'agent-provider-list', id: 'agent-provider-list' },
+        h('span', { class: 'muted' }, 'loading…')),
+    );
+    fetch('/api/providers', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(d => renderAgentProviderList(d.providers || []))
+      .catch(() => {
+        const host = panel.querySelector('#agent-provider-list');
+        if (host) host.replaceChildren(
+          h('span', { class: 'muted' }, 'failed to load providers'));
+      });
+    return panel;
+  }
+
+  function renderAgentProviderList(providers) {
+    const host = document.getElementById('agent-provider-list');
+    if (!host) return;
+    const current = (prefs.getItem('default-provider') || 'claude').trim();
+    const rows = providers.map(p => {
+      const row = h('label', {
+        class: 'agent-provider-row'
+                + (p.installed ? '' : ' disabled')
+                + (p.id === current ? ' active' : ''),
+        title: p.installed
+          ? `binary: ${p.binary}`
+          : `binary "${p.binary}" not found on PATH`,
+      },
+        h('input', {
+          type: 'radio', name: 'agent-provider',
+          value: p.id,
+          checked: (p.id === current) ? '' : null,
+          disabled: p.installed ? null : '',
+          onchange: () => setDefaultProvider(p.id),
+        }),
+        h('div', { class: 'agent-provider-body' },
+          h('div', { class: 'agent-provider-head' },
+            h('strong', {}, p.display_name),
+            h('span', { class: 'muted' }, ' · ', p.binary),
+            p.installed
+              ? h('span', { class: 'pill clean' }, t('profile.agent.installed'))
+              : h('span', { class: 'pill behind' }, t('profile.agent.missing')),
+            p.supports_mcp
+              ? h('span', { class: 'pill' }, t('profile.agent.mcp'))
+              : null,
+            p.supports_hooks
+              ? h('span', { class: 'pill' }, t('profile.agent.hooks'))
+              : null,
+          ),
+        ),
+      );
+      return row;
+    });
+    host.replaceChildren(...rows);
+  }
+
+  async function setDefaultProvider(id) {
+    prefs.setItem('default-provider', id);
+    try {
+      await fetch('/api/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preferences: { 'default-provider': id } }),
+      });
+      showToast('ok', `default agent: ${id}`);
+    } catch (err) {
+      showToast('error', `failed to save: ${err}`);
+    }
+    // Re-render to flip the .active class.
+    fetch('/api/providers', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(d => renderAgentProviderList(d.providers || []))
+      .catch(() => {});
   }
 
   // Claude-model picker lives on its own tab so the radio list with
@@ -2700,7 +2892,10 @@
 
     const tabs = [
       { id: 'dashboard',    label: t('profile.tab.dashboard'),
-        build: () => buildProfileDashboardPanel(meta, editors) },
+        build: () => buildProfileDashboardPanel(meta, editors),
+        onShow: () => renderGithubReposEditor() },
+      { id: 'agent',        label: t('profile.tab.agent'),
+        build: () => buildProfileAgentPanel() },
       { id: 'claude-model', label: t('profile.tab.claude-model'),
         build: () => buildProfileClaudeModelPanel() },
       { id: 'theme',        label: t('profile.tab.theme'),
@@ -5094,6 +5289,358 @@
     return 0;
   }
 
+  // ── GitHub modal ──────────────────────────────────────────────────────
+  // Lists issues assigned to you + your open PRs across every repo in
+  // the `github-repos` preference. Lean: fetch on open, render a flat
+  // table per section, click anywhere to dismiss.
+  const githubModal = { open: false };
+
+  function openGithubModal() {
+    if (githubModal.open) return;
+    githubModal.open = true;
+    const modal = h('div', { class: 'logs-modal-backdrop', id: 'github-modal' },
+      h('div', { class: 'logs-modal week-modal',
+                  role: 'dialog', 'aria-labelledby': 'github-modal-title',
+                  onclick: (e) => e.stopPropagation() },
+        h('div', { class: 'logs-modal-head' },
+          h('strong', { id: 'github-modal-title' }, t('github.title')),
+          h('span', { style: { flex: '1' } }),
+          h('button', { class: 'btn btn-inline', id: 'github-refresh',
+            onclick: () => loadGithub(true) }, t('github.refresh')),
+          h('button', { class: 'btn btn-inline',
+                        onclick: closeGithubModal }, t('github.close')),
+        ),
+        h('div', { class: 'week-body', id: 'github-body' },
+          h('span', { class: 'muted' }, t('github.loading'))),
+      ),
+    );
+    modal.addEventListener('click', closeGithubModal);
+    document.body.append(modal);
+    document.addEventListener('keydown', githubKeyHandler);
+    loadGithub(false);
+  }
+
+  function closeGithubModal() {
+    if (!githubModal.open) return;
+    githubModal.open = false;
+    document.getElementById('github-modal')?.remove();
+    document.removeEventListener('keydown', githubKeyHandler);
+  }
+
+  function githubKeyHandler(e) { if (e.key === 'Escape') closeGithubModal(); }
+
+  async function loadGithub(force) {
+    const btn = document.getElementById('github-refresh');
+    if (btn) btn.disabled = true;
+    try {
+      const qs = force ? '?force=1' : '';
+      const [issuesR, prsR] = await Promise.all([
+        fetch('/api/github/issues' + qs, { cache: 'no-store' }).then(r => r.json()),
+        fetch('/api/github/prs' + qs, { cache: 'no-store' }).then(r => r.json()),
+      ]);
+      renderGithubModal(issuesR, prsR);
+    } catch (err) {
+      const body = document.getElementById('github-body');
+      if (body) body.replaceChildren(h('div', { class: 'muted',
+        style: { padding: '1rem' } }, String(err)));
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function renderGithubModal(issuesR, prsR) {
+    const body = document.getElementById('github-body');
+    if (!body) return;
+    const repos = (issuesR?.repos || prsR?.repos || []);
+    if (!repos.length) {
+      body.replaceChildren(h('div', { class: 'muted',
+        style: { padding: '1rem' } }, t('github.not-configured')));
+      return;
+    }
+    // Build a workspace-name lookup so each row can show whether it
+    // already has a local worktree dir.
+    const wsNames = new Set((window.__lastState?.issues || [])
+      .map(i => i.issue));
+    function hasWorkspaceFor(num) {
+      const prefix = `${num}-`;
+      for (const w of wsNames) {
+        if (w === String(num) || w.startsWith(prefix)) return true;
+      }
+      return false;
+    }
+    function workspaceNameFor(number, title) {
+      // Conventional `<num>-<kebab-title>` workspace folder. Title is
+      // lowercased + non-alphanum collapsed to '-'; truncated so the
+      // folder name doesn't blow out at very long issue titles.
+      const slug = (title || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 40)
+        .replace(/-+$/g, '');
+      return slug ? `${number}-${slug}` : String(number);
+    }
+    function existingWorkspaceFor(number) {
+      const prefix = `${number}-`;
+      for (const w of wsNames) {
+        if (w === String(number) || w.startsWith(prefix)) return w;
+      }
+      return null;
+    }
+    function issueTable(rows, emptyKey, opts) {
+      const isPRTable = (opts && opts.isPR) || false;
+      if (!rows || !rows.length) {
+        return h('div', { class: 'muted', style: { padding: '0.5rem 1rem' } },
+          t(emptyKey));
+      }
+      const ths = [
+        h('th', {}, t('github.col.repo')),
+        h('th', { class: 'num' }, t('github.col.number')),
+        h('th', {}, t('github.col.title')),
+        h('th', {}, t('github.col.state')),
+        h('th', {}, t('github.col.workspace')),
+      ];
+      if (!isPRTable) {
+        ths.push(h('th', {}, t('github.col.model')));
+        ths.push(h('th', {}, t('github.col.actions')));
+      }
+      const tbody = rows.map(it => {
+        const existing = existingWorkspaceFor(it.number);
+        const wsName = existing || workspaceNameFor(it.number, it.title);
+        const tds = [
+          h('td', { class: 'muted' }, it.repo || ''),
+          h('td', { class: 'num' },
+            h('a', { href: it.url, target: '_blank',
+                      rel: 'noopener noreferrer' }, '#' + it.number)),
+          h('td', {}, it.title || ''),
+          h('td', {},
+            h('span', { class: `github-pill github-pill-${it.state || 'open'}${it.isDraft ? ' github-pill-draft' : ''}` },
+              it.state + (it.isDraft ? ' (draft)' : ''))),
+          h('td', {},
+            existing
+              ? h('a', { href: '#' + existing,
+                          onclick: closeGithubModal }, existing)
+              : t('github.no-workspace')),
+        ];
+        if (!isPRTable) {
+          tds.push(githubModelCell(existing, it));
+          tds.push(githubActionsCell(existing, wsName, it));
+        }
+        return h('tr', {}, ...tds);
+      });
+      return h('table', { class: 'github-table' },
+        h('thead', {}, h('tr', {}, ...ths)),
+        h('tbody', {}, ...tbody));
+    }
+    const issues = (issuesR?.issues || []);
+    const prs = (prsR?.prs || []);
+    const errs = [issuesR?.error, prsR?.error].filter(Boolean);
+    const children = [
+      h('div', { style: { padding: '0.5rem 1rem 0', fontSize: '12px' } },
+        h('span', { class: 'muted' }, 'repos: '),
+        ...repos.map(r => h('span', { class: 'pill', style: { marginRight: '0.4rem' } }, r))),
+    ];
+    if (errs.length) {
+      children.push(h('div', { class: 'pill behind',
+        style: { margin: '0.5rem 1rem' } }, errs.join('; ')));
+    }
+    children.push(
+      h('h4', { style: { padding: '0.6rem 1rem 0', margin: 0 } },
+        t('github.section.issues')),
+      issueTable(issues, 'github.empty-issues'),
+      h('h4', { style: { padding: '0.6rem 1rem 0', margin: 0 } },
+        t('github.section.prs')),
+      issueTable(prs.map(pr => ({
+        repo: pr.repo, number: pr.number, title: pr.title,
+        state: pr.state, url: pr.url, isDraft: pr.isDraft,
+      })), 'github.empty-prs', { isPR: true }),
+    );
+    body.replaceChildren(...children);
+  }
+
+  // Per-issue Model picker shown in the GitHub modal table. Only
+  // meaningful for an existing workspace (the model override is keyed
+  // on the workspace folder name); when no workspace exists, the cell
+  // shows a muted dash. Currently only Claude Code surfaces models in
+  // the dashboard's pref schema; other providers may add their own
+  // model lists later — falling back to "use default" keeps the cell
+  // useful even when the active provider is non-Claude.
+  function githubModelCell(workspace, _it) {
+    if (!workspace) return h('td', { class: 'muted' }, '—');
+    const prefKey = `workspace-model-${workspace}`;
+    const current = (prefs.getItem(prefKey) || '').trim();
+    const choices = [
+      { v: '',                    label: 'Use default' },
+      { v: 'claude-opus-4-7',     label: 'Opus 4.7' },
+      { v: 'claude-sonnet-4-6',   label: 'Sonnet 4.6' },
+      { v: 'claude-haiku-4-5',    label: 'Haiku 4.5' },
+    ];
+    const sel = h('select', {
+      class: 'github-model-select',
+      title: 'Per-workspace model override',
+      onchange: async (e) => {
+        const v = e.target.value;
+        prefs.setItem(prefKey, v);
+        try {
+          await fetch('/api/preferences', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ preferences: { [prefKey]: v || null } }),
+          });
+        } catch (_) {}
+      },
+    }, ...choices.map(c => h('option', {
+      value: c.v,
+      selected: (c.v === current) ? '' : null,
+    }, c.label)));
+    return h('td', {}, sel);
+  }
+
+  // Modal: pick which configured GitHub repos to clone into the new
+  // workspace. Defaults to "all" so the common case (issue spans the
+  // whole tracked set) is one click. The repo list comes from the
+  // /api/github/config payload — same source as the Profile editor.
+  function openAddWorkspaceDialog(wsName, issueObj) {
+    const backdrop = h('div', { class: 'logs-modal-backdrop',
+      onclick: (e) => { if (e.target === backdrop) backdrop.remove(); } });
+    const checkboxesHost = h('div', { class: 'github-pickrepos-list' },
+      h('span', { class: 'muted' }, t('github.loading')));
+    const submitBtn = h('button', { class: 'btn btn-primary',
+      disabled: '', onclick: () => doCreate() }, t('github.create-with', { n: 0 }));
+    const modal = h('div', { class: 'logs-modal',
+      style: { maxWidth: '480px' },
+      role: 'dialog', onclick: (e) => e.stopPropagation() },
+      h('div', { class: 'logs-modal-head' },
+        h('strong', {}, t('github.pick-repos', { number: issueObj.number })),
+        h('span', { class: 'muted' }, ' · ', wsName),
+        h('span', { style: { flex: '1' } }),
+        h('button', { class: 'btn btn-inline', onclick: () => backdrop.remove() },
+          t('github.close')),
+      ),
+      h('div', { style: { padding: '0.8rem 1rem' } },
+        checkboxesHost,
+        h('div', { style: { marginTop: '0.8rem', display: 'flex',
+                              justifyContent: 'flex-end', gap: '0.5rem' } },
+          submitBtn)),
+    );
+    backdrop.append(modal);
+    document.body.append(backdrop);
+    function escHandler(e) {
+      if (e.key === 'Escape') { backdrop.remove(); document.removeEventListener('keydown', escHandler); }
+    }
+    document.addEventListener('keydown', escHandler);
+
+    let repos = [];
+    const picked = new Set();
+
+    function refreshSubmit() {
+      submitBtn.disabled = picked.size === 0 ? '' : null;
+      submitBtn.textContent = t('github.create-with', { n: picked.size });
+    }
+
+    fetch('/api/github/config', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(d => {
+        repos = (d.repos || []).map(slug => {
+          const name = slug.split('/').pop();
+          return { slug, name };
+        });
+        if (!repos.length) {
+          checkboxesHost.replaceChildren(h('div', { class: 'muted' },
+            t('github.repos.empty')));
+          return;
+        }
+        repos.forEach(r => picked.add(r.name));
+        checkboxesHost.replaceChildren(...repos.map(r => h('label',
+          { class: 'github-pickrepos-row' },
+          h('input', {
+            type: 'checkbox', checked: '',
+            onchange: (e) => {
+              if (e.target.checked) picked.add(r.name);
+              else picked.delete(r.name);
+              refreshSubmit();
+            },
+          }),
+          h('span', {}, r.name),
+          h('span', { class: 'muted', style: { marginLeft: '0.4rem' } },
+            r.slug),
+        )));
+        refreshSubmit();
+      })
+      .catch(() => {
+        checkboxesHost.replaceChildren(h('div', { class: 'muted' },
+          'failed to load repos'));
+      });
+
+    async function doCreate() {
+      const reposList = Array.from(picked);
+      submitBtn.disabled = '';
+      submitBtn.textContent = '…';
+      try {
+        const r = await fetch('/api/issue/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ issue: wsName, repos: reposList }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (r.status >= 400 || (r.status === 207 && (d.results || []).some(x => !x.ok))) {
+          const fails = (d.results || []).filter(x => !x.ok)
+            .map(x => `${x.repo || '·'}: ${x.message || x.action}`).join('; ');
+          throw new Error(fails || d.error || `status ${r.status}`);
+        }
+        showToast('ok', `created ${wsName} (${reposList.length} repo${reposList.length === 1 ? '' : 's'})`);
+        backdrop.remove();
+        document.removeEventListener('keydown', escHandler);
+        await refreshAll();
+        loadGithub(false);
+      } catch (err) {
+        showToast('error', `create failed: ${err.message || err}`);
+        refreshSubmit();
+      }
+    }
+  }
+
+  function githubActionsCell(existing, wsName, _it) {
+    if (existing) {
+      return h('td', {},
+        h('button', {
+          class: 'btn btn-inline btn-danger',
+          title: t('github.action.remove-tip', { name: existing }),
+          onclick: async () => {
+            if (!window.confirm(`Remove workspace ${existing}?`)) return;
+            try {
+              const r = await fetch('/api/issue/remove', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ issue: existing }),
+              });
+              const d = await r.json().catch(() => ({}));
+              // 207 Multi-Status means partial — surface the failures
+              // instead of pretending it worked.
+              if (r.status >= 400 || (r.status === 207 && (d.results || []).some(x => !x.ok))) {
+                const fails = (d.results || [])
+                  .filter(x => !x.ok)
+                  .map(x => `${x.repo || '·'}: ${x.message || x.action}`)
+                  .join('; ');
+                throw new Error(fails || d.error || `status ${r.status}`);
+              }
+              showToast('ok', `removed ${existing}`);
+              await refreshAll();
+              loadGithub(false);
+            } catch (err) {
+              showToast('error', `remove failed: ${err.message || err}`);
+            }
+          },
+        }, t('github.action.remove')));
+    }
+    return h('td', {},
+      h('button', {
+        class: 'btn btn-inline btn-primary',
+        title: t('github.action.add-tip', { name: wsName }),
+        onclick: () => openAddWorkspaceDialog(wsName, _it),
+      }, t('github.action.add')));
+  }
+
   // openAllEventsModal()      → unfiltered, every issue
   // openAllEventsModal(issue) → scoped to one issue (used by the tab badge)
   function openAllEventsModal(issueId = null) {
@@ -6669,7 +7216,7 @@
   }
 
   // ── Add Issue dialog ──────────────────────────────────────────────
-  // Creates worktrees under ~/git/worktrees/<issue>/<repo> for the
+  // Creates worktrees under {root}/<issue>/<repo> for the
   // chosen repos. Server checks origin/<issue> for each repo: if the
   // branch exists, the new worktree tracks it; otherwise a new branch
   // is created from `base_branch` (default "master"). The dialog is
@@ -7291,7 +7838,7 @@
               t('pill.missing'),
               h('div', { class: 'hover-popover' },
                 h('div', { class: 'hover-popover-foot' },
-                  `No ${repo.repo} subdirectory under ~/git/worktrees/${repo.issue}. `
+                  `No ${repo.repo} subdirectory under {root}/${repo.issue}. `
                   + 'Use the + Add issue dialog (or git worktree add manually) to materialise it.'))),
           ),
         ),
@@ -7728,7 +8275,7 @@
     }
 
     // ↗ Open — open the issue's whole worktree dir
-    // (~/git/worktrees/<issue>/) in the configured editor so the user
+    // ({root}/<issue>/) in the configured editor so the user
     // sees core / bssweb / doc side-by-side. The per-repo Open
     // button next to each branch name handles single-repo cases.
     const issueDir = (window.__lastState?.worktrees_root || '')
@@ -10939,6 +11486,12 @@
           h('div', { class: 'hover-popover' },
             h('div', { class: 'hover-popover-foot' },
               t('tip.week-summary')))),
+        h('button', { class: 'btn hover-popover-host',
+                      onclick: () => openGithubModal() },
+          t('toolbar.github'),
+          h('div', { class: 'hover-popover' },
+            h('div', { class: 'hover-popover-foot' },
+              t('tip.github')))),
         // The pending-event callout lives on each issue tab (the 🔔N
         // pill), so the toolbar button stays plain — no global count.
         h('button', {
@@ -11706,6 +12259,29 @@
         'aria-label': `${issueObj.issue} details`,
         onclick: (ev) => ev.stopPropagation(),
       }, 'ⓘ', buildTabInfoTooltip(issueObj)));
+      // GitHub issue + PR pills — present when the dashboard's
+      // GitHub integration is configured AND a) the workspace folder
+      // name starts with a digit-prefix matching an issue, or
+      // b) a PR exists whose head branch equals the workspace name.
+      const gh = issueObj.github;
+      if (gh?.issue) {
+        const gi = gh.issue;
+        btn.append(h('a', {
+          class: `github-pill github-pill-${gi.state || 'open'}`,
+          href: gi.url, target: '_blank', rel: 'noopener noreferrer',
+          title: gi.title || '',
+          onclick: (e) => e.stopPropagation(),
+        }, `#${gi.number}`));
+      }
+      if (gh?.pr) {
+        const gp = gh.pr;
+        btn.append(h('a', {
+          class: `github-pill github-pill-pr github-pill-${gp.state || 'open'}${gp.isDraft ? ' github-pill-draft' : ''}`,
+          href: gp.url, target: '_blank', rel: 'noopener noreferrer',
+          title: gp.title || '',
+          onclick: (e) => e.stopPropagation(),
+        }, 'PR'));
+      }
       if (warn) btn.append(h('span', { class: 'badge' }, `⚠${warn}`));
       // Pending agent-event badge — clicking it opens the agent-events
       // modal scoped to this issue, where the events can be read and

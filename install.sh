@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # install.sh — one-line bootstrap for agent-workspace.
 #
-# Clones (or updates) the repo into ~/git/agent-workspace and runs
+# Clones (or updates) the repo into ~/github/agent-workspace and runs
 # setup.sh, which does the per-machine install (symlinks, completions,
 # optional systemd unit, optional Claude Code hooks).
 #
@@ -14,7 +14,7 @@
 #
 # Flags:
 #   --repo URL        git remote to clone (REQUIRED — no default)
-#   --dir PATH        where to clone (default: ~/git/agent-workspace)
+#   --dir PATH        where to clone (default: ~/github/agent-workspace)
 #   --branch NAME     branch / tag / SHA to check out (default: origin HEAD)
 #   --no-setup        skip the setup.sh step (just clone)
 #   any other flags   forwarded to setup.sh
@@ -25,7 +25,7 @@
 set -euo pipefail
 
 REPO_URL="${AGENT_WORKSPACE_REPO:-}"
-TARGET_DIR="${AGENT_WORKSPACE_DIR:-$HOME/git/agent-workspace}"
+TARGET_DIR="${AGENT_WORKSPACE_DIR:-$HOME/github/agent-workspace}"
 BRANCH="${AGENT_WORKSPACE_BRANCH:-}"
 RUN_SETUP=1
 SETUP_ARGS=()

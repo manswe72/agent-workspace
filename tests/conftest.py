@@ -67,7 +67,7 @@ def tmp_worktrees_root(tmp_path: Path) -> tuple[Path, Path]:
 
     Returns (worktrees_root, primaries_root). primaries_root is the
     parent of worktrees_root, mirroring how the dashboard sees the
-    real `~/git/worktrees/` + `~/git/<repo>/` layout.
+    real `~/github/worktrees/` + `~/github/<repo>/` layout.
     """
     primaries = tmp_path / "primaries"
     primaries.mkdir()

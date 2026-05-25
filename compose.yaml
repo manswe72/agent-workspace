@@ -1,7 +1,7 @@
 # Run the dashboard as a container. Defaults assume the typical layout:
-#   ~/git/worktrees/        — your active issue worktrees
-#   ~/git/<repo>/           — primary checkouts (core, bssweb, doc, …)
-#   ~/git/agent-workspace/ — this repo (must be a git checkout if you want sync)
+#   ~/github/worktrees/        — your active issue worktrees
+#   ~/github/<repo>/           — primary checkouts (core, bssweb, doc, …)
+#   ~/github/agent-workspace/ — this repo (must be a git checkout if you want sync)
 #   ~/.ssh/                 — keys for ssh:// git remotes
 #
 # Adjust the host-side paths to taste. The "Open in terminal tabs" button on
@@ -19,7 +19,7 @@ services:
       # Worktrees — read-write so the server can materialize missing dirs
       # via `git worktree add`. Make read-only if you'd rather forbid it
       # and pass --no-materialize via `command:` below.
-      - ${HOME}/git/worktrees:/worktrees:rw
+      - ${HOME}/github/worktrees:/worktrees:rw
       # Primary repos — needed to run `git worktree add`. Read-write because
       # `git fetch origin` and `git worktree add` write metadata under .git.
       - ${HOME}/git:/primaries:rw

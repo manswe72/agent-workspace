@@ -30,7 +30,7 @@ contain everyone's data without merge conflicts.
 
 No absolute paths are stored. Each entry is keyed by `(issue, repo)`. On any
 machine the server resolves the live path as `<--worktrees>/<issue>/<repo>`
-where `--worktrees` is a CLI flag (default `~/git/worktrees`).
+where `--worktrees` is a CLI flag (default `~/github/worktrees`).
 
 ## Workflow
 

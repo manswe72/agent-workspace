@@ -1,7 +1,7 @@
 # Shared context for every agent launched by the agent-workspace dashboard
 
 This file is read automatically by every agent session whose cwd is
-under `~/git/worktrees/` — every per-workspace inline agent + the
+under `~/github/worktrees/` — every per-workspace inline agent + the
 General Agent. Keep it lean and high-signal; don't paste documentation
 here that's already in the dashboard's own docs.
 
@@ -11,11 +11,11 @@ Each agent has its own cwd:
 
 | Agent | cwd | role |
 |---|---|---|
-| Workspace agent | `~/git/worktrees/<workspace>/<repo>` | working on one task, one worktree branch |
-| General Agent (Agent 007) | `~/git/worktrees/` | not tied to any single workspace; can `cd <workspace>/<repo>` into any worktree to inspect or review |
+| Workspace agent | `~/github/worktrees/<workspace>/<repo>` | working on one task, one worktree branch |
+| General Agent (Agent 007) | `~/github/worktrees/` | not tied to any single workspace; can `cd <workspace>/<repo>` into any worktree to inspect or review |
 
 Primary repo checkouts (where stashes + shared config live, not
-worktree branches) are at `~/git/<repo>/`.
+worktree branches) are at `~/github/<repo>/`.
 
 ## agent-workspace MCP — talking to other agents (Claude Code provider only)
 

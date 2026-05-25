@@ -3953,3 +3953,134 @@ details.inner-details[open] > summary { color: var(--fg-muted); }
 }
 .copy-cmd:hover { background: var(--panel-2); }
 .copy-cmd.copied { color: var(--success); border-color: var(--success); }
+
+/* ── GitHub Issues + PRs ──────────────────────────────────────────────── */
+.github-pill {
+  display: inline-block;
+  padding: 0 0.5rem;
+  margin-left: 0.35rem;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.7;
+  vertical-align: middle;
+  text-decoration: none;
+  white-space: nowrap;
+  background: rgba(31, 136, 61, 0.15);
+  color: var(--success);
+  border: 1px solid transparent;
+}
+.github-pill:hover { opacity: 0.85; text-decoration: none; }
+.github-pill.github-pill-closed {
+  background: rgba(207, 34, 46, 0.15);
+  color: var(--danger);
+}
+.github-pill.github-pill-merged {
+  background: rgba(130, 80, 223, 0.15);
+  color: #8250df;
+}
+.github-pill.github-pill-draft {
+  background: var(--border-2);
+  color: var(--fg-muted);
+}
+.github-pill.github-pill-pr {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+nav.tabs .github-pill { font-size: 10px; }
+
+.github-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.3rem 0;
+  font-size: 12px;
+}
+.github-table th, .github-table td {
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-2);
+}
+.github-table th { background: var(--panel-2); font-weight: 600; }
+.github-table td.num, .github-table th.num { text-align: right; }
+.github-table tr:hover td { background: var(--panel-2); }
+
+/* Agent provider radio list (Profile → Agent CLI tab) */
+.agent-provider-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.agent-provider-row {
+  display: flex; align-items: flex-start; gap: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--panel);
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.agent-provider-row:hover { background: var(--panel-2); }
+.agent-provider-row.active { border-color: var(--accent); }
+.agent-provider-row.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.agent-provider-row input[type="radio"] {
+  margin-top: 0.25rem;
+}
+.agent-provider-body { flex: 1; min-width: 0; }
+.agent-provider-head {
+  display: flex; align-items: center; gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.agent-provider-head .pill { font-size: 10.5px; }
+
+.github-model-select {
+  font-size: 11px;
+  padding: 1px 4px;
+  border: 1px solid var(--border-2);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--fg);
+}
+.github-model-select:hover { border-color: var(--accent); }
+.github-table .btn-inline { padding: 2px 8px; font-size: 11px; }
+
+/* GitHub-repos editor (Profile → Dashboard tab) */
+.github-repos-editor {
+  display: flex; flex-direction: column; gap: 0.4rem;
+  width: 100%;
+}
+.github-repos-list {
+  display: flex; flex-direction: column; gap: 0.25rem;
+}
+.github-repos-row {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 4px 8px;
+  background: var(--panel);
+  border: 1px solid var(--border-2);
+  border-radius: 4px;
+}
+.github-repos-slug { font-family: var(--mono); font-size: 12px; flex: 1; }
+.github-repos-row .btn-inline { padding: 1px 6px; font-size: 11px; }
+.github-repos-add {
+  display: flex; gap: 0.4rem; align-items: center;
+}
+.github-repos-input {
+  flex: 1;
+  padding: 4px 8px;
+  font-family: var(--mono); font-size: 12px;
+  background: var(--panel); color: var(--fg);
+  border: 1px solid var(--border-2); border-radius: 4px;
+}
+
+/* "Pick which repos to clone" modal (per-issue + Add) */
+.github-pickrepos-list {
+  display: flex; flex-direction: column; gap: 0.3rem;
+  max-height: 50vh; overflow-y: auto;
+}
+.github-pickrepos-row {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 6px 10px;
+  border: 1px solid var(--border-2);
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--panel);
+}
+.github-pickrepos-row:hover { background: var(--panel-2); }

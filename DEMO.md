@@ -6,7 +6,7 @@ instance on `:8765`. The audience walks through "+ Add workspace" live.
 
 ## Prerequisites
 
-- `~/git/<repo>/` — primary checkouts (any repos you want to demo
+- `~/github/<repo>/` — primary checkouts (any repos you want to demo
   worktrees against). The demo needs these so the server can
   `git worktree add` from them into the empty demo worktrees root.
 
@@ -15,18 +15,18 @@ instance on `:8765`. The audience walks through "+ Add workspace" live.
 ```bash
 # Clear any leftover state from a previous demo. The demo's
 # worktrees + primaries roots mirror the production layout
-# (~/git/worktrees alongside ~/git/<repo>/) but under
+# (~/github/worktrees alongside ~/github/<repo>/) but under
 # ~/.cache/agent-workspace/demo/ so nothing collides with your real
 # checkouts and the (often small) /tmp tmpfs can't fill up under a
 # multi-GB shallow clone.
-~/git/agent-workspace/bin/agent-worktrees-stop --port 9001
+~/github/agent-workspace/bin/agent-worktrees-stop --port 9001
 rm -rf ~/.cache/agent-workspace/demo
 rm -f  ~/.cache/agent-workspace/activity.9001.sqlite \
        ~/.cache/agent-workspace/server.9001.*
 mkdir -p ~/.cache/agent-workspace/demo/worktrees
 
 # Start the demo instance.
-~/git/agent-workspace/bin/agent-worktrees-restart --port 9001 \
+~/github/agent-workspace/bin/agent-worktrees-restart --port 9001 \
   --no-sync --no-backup --no-hydrate --no-materialize \
   --worktrees ~/.cache/agent-workspace/demo/worktrees \
   --primaries ~/.cache/agent-workspace/demo
@@ -84,6 +84,6 @@ What each flag does:
 ## Cleanup
 
 ```bash
-~/git/agent-workspace/bin/agent-worktrees-stop --port 9001
+~/github/agent-workspace/bin/agent-worktrees-stop --port 9001
 rm -rf ~/.cache/agent-workspace/demo
 ```

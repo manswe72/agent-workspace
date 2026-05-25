@@ -1,6 +1,6 @@
 # Agent Workspace · Status Board
 
-A local HTTP dashboard for `~/git/worktrees/<issue>/<repo>` — your
+A local HTTP dashboard for `~/github/worktrees/<issue>/<repo>` — your
 **Agent Workspace · Status Board**. Shows git status across every
 active issue branch, time tracking, week summaries, agent
 events from Claude Code hooks, and a server diagnostics console. Light /
@@ -63,8 +63,8 @@ Inside each tab:
 ## Quick start
 
 ```bash
-git clone <agent-workspace-url> ~/git/agent-workspace
-cd ~/git/agent-workspace
+git clone <agent-workspace-url> ~/github/agent-workspace
+cd ~/github/agent-workspace
 ./setup.sh
 ```
 
@@ -132,8 +132,8 @@ pip install pywinpty ruff pytest
 Install (run inside Git Bash):
 
 ```bash
-git clone <agent-workspace-url> ~/git/agent-workspace
-cd ~/git/agent-workspace
+git clone <agent-workspace-url> ~/github/agent-workspace
+cd ~/github/agent-workspace
 ./setup.sh
 agent-worktrees-server
 ```
@@ -175,8 +175,8 @@ exec zsh
 Install:
 
 ```bash
-git clone <agent-workspace-url> ~/git/agent-workspace
-cd ~/git/agent-workspace
+git clone <agent-workspace-url> ~/github/agent-workspace
+cd ~/github/agent-workspace
 ./setup.sh
 agent-worktrees-server
 ```
@@ -430,7 +430,7 @@ start. Quote the full string in bug reports.
 | `bin/agent-worktrees-server` | Start the dashboard server. Writes its PID to `~/.cache/agent-workspace/server.<port>.pid` on startup. |
 | `bin/agent-worktrees-restart` | Stop the running server (via the per-port pidfile) and start a fresh one detached. Accepts `--port N`; other flags forwarded. Logs to `~/.cache/agent-workspace/server.<port>.log`. |
 | `bin/agent-worktrees-stop` | Stop a running server. Reads the per-port pidfile, sends SIGTERM, escalates to SIGKILL on timeout. Accepts `--port N` (default 8765). |
-| `bin/agent-worktrees` | Open one terminal tab per `~/git/worktrees/<issue>` with `claude --continue` already running. The system prompt is pre-loaded with workspace / branch context so the session knows what it's working on. Exports `AGENT_WORKSPACE_LAUNCHED=1` so workspace-spawned agents send notifications only to the dashboard (not GNOME notify-send). |
+| `bin/agent-worktrees` | Open one terminal tab per `~/github/worktrees/<issue>` with `claude --continue` already running. The system prompt is pre-loaded with workspace / branch context so the session knows what it's working on. Exports `AGENT_WORKSPACE_LAUNCHED=1` so workspace-spawned agents send notifications only to the dashboard (not GNOME notify-send). |
 | `bin/agent-workspace-sync` | One-shot of the auto-sync tick (export SQLite → `data/<user>/`, `git add` + commit if changed, push, fetch, ff-only pull). |
 | `bin/agent-event-notify` | Hook script invoked by Claude Code (see above). Skips `notify-send` when `AGENT_WORKSPACE_LAUNCHED=1`. |
 | `bin/agent-mailbox-inject` | UserPromptSubmit hook — prepends "📬 You have N unread message(s)…" to the agent's next turn when its agent-workspace MCP mailbox has anything. Fail-open: any error / missing dashboard exits 0 with no output so the prompt always goes through. |
@@ -505,7 +505,7 @@ agent-workspace/
 ├── install.sh             ← one-line bootstrap: clone + setup.sh
 ├── setup.sh               ← per-machine installer (symlinks, hooks)
 ├── templates/
-│   └── worktrees-AGENTS.md   ← installed by setup.sh into ~/git/worktrees/AGENTS.md,
+│   └── worktrees-AGENTS.md   ← installed by setup.sh into ~/github/worktrees/AGENTS.md,
 │                                 read automatically by every dashboard-spawned agent
 ├── static/                ← dashboard CSS / JS / favicon / manifest / sw.js
 ├── bin/
@@ -548,8 +548,8 @@ The server detects the OS at startup and routes state files to the XDG spec
 | `~/.config/systemd/user/agent-workspace.service` | Optional systemd user unit installed by `setup.sh --systemd` (Linux only; macOS uses launchd, Windows Task Scheduler). |
 | `~/.claude/settings.json` | Claude Code config — `setup.sh --enable-claude-hooks` merges hook entries here. |
 | `~/.claude/projects/<encoded>/*.jsonl` | Claude Code session transcripts — the dashboard reads these for agent activity / token rollups. Not modified. |
-| `~/git/worktrees/<issue>/<repo>/` | The actual worktrees the dashboard reports on (`--worktrees PATH` to override). Read-only from the server. |
-| `~/git/<repo>/` | The primary checkouts (`--primaries PATH` to override). Server may `git worktree add` here to materialize missing worktrees, but does not modify branches or commits. |
+| `~/github/worktrees/<issue>/<repo>/` | The actual worktrees the dashboard reports on (`--worktrees PATH` to override). Read-only from the server. |
+| `~/github/<repo>/` | The primary checkouts (`--primaries PATH` to override). Server may `git worktree add` here to materialize missing worktrees, but does not modify branches or commits. |
 
 Notes:
 

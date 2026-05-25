@@ -417,21 +417,21 @@ case ":$PATH:" in
 esac
 
 # Worktrees root: not required but worth flagging.
-if [[ ! -d "${HOME}/git/worktrees" ]]; then
-  warn "${HOME}/git/worktrees does not exist yet — the dashboard will be empty until you create a worktree under it (or pass --worktrees PATH)."
+if [[ ! -d "${HOME}/github/worktrees" ]]; then
+  warn "${HOME}/github/worktrees does not exist yet — the dashboard will be empty until you create a worktree under it (or pass --worktrees PATH)."
 fi
 
 # Shared AGENTS.md for every dashboard-spawned agent. Lives at the
 # worktrees root so it gets read by every claude session whose cwd
-# is under ~/git/worktrees/ (per-issue agents + Agent 007). We
+# is under ~/github/worktrees/ (per-issue agents + Agent 007). We
 # copy from templates/worktrees-AGENTS.md only when the destination
 # is missing — never overwrite a customised file, never touch one
 # the user has edited.
 WT_CLAUDE_SRC="$REPO_DIR/templates/worktrees-AGENTS.md"
-WT_CLAUDE_DST="${HOME}/git/worktrees/AGENTS.md"
+WT_CLAUDE_DST="${HOME}/github/worktrees/AGENTS.md"
 if [[ -f "$WT_CLAUDE_SRC" ]]; then
-  if [[ ! -d "${HOME}/git/worktrees" ]]; then
-    info "skipping shared AGENTS.md install — ${HOME}/git/worktrees doesn't exist yet"
+  if [[ ! -d "${HOME}/github/worktrees" ]]; then
+    info "skipping shared AGENTS.md install — ${HOME}/github/worktrees doesn't exist yet"
   elif [[ -f "$WT_CLAUDE_DST" ]]; then
     info "shared AGENTS.md already exists at $WT_CLAUDE_DST (not overwriting)"
   else

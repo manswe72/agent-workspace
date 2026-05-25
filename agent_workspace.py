@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 agent-workspace — local HTTP server that produces a status dashboard for
-~/git/worktrees/<issue>/<repo>/.
+~/github/worktrees/<issue>/<repo>/.
 
 Architecture
 ------------
@@ -44,6 +44,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from awlib import agent_mcp, agentterm
+from awlib import github as _github
 from awlib import pricing as _pricing
 from awlib import stashes as _stashes
 from awlib import updater as _updater
@@ -112,21 +113,21 @@ from awlib.weekid import iso_week_id, week_bounds  # noqa: F401
 
 # ── Configuration ──────────────────────────────────────────────────────────
 HOME = Path.home()
-DEFAULT_WORKTREES = HOME / "git" / "worktrees"
+DEFAULT_WORKTREES = HOME / "github" / "worktrees"
 DEFAULT_PORT = 8765
 DEFAULT_BEHIND_LIMIT = 50
 REPO_PRIORITY = ("core", "bssweb", "doc")  # legacy hint; no longer used as a filter
-# Repos the dashboard always wants to see for an issue. Anything in this
-# tuple gets rendered even if the user hasn't materialised a worktree
-# for it — as a "missing" placeholder row so they spot the gap at a
-# glance. discover_repos still returns *every* repo on disk, so extra
-# repos beyond this set still show up.
+# Repos the dashboard always wants to see for a workspace. Anything in
+# this list gets rendered even if the user hasn't materialised a
+# worktree for it — as a "missing" placeholder row so they spot the
+# gap at a glance. discover_repos still returns *every* repo on disk,
+# so extra repos beyond this set still show up.
 #
-# This is the fallback default. Per-user override lives in the
-# preferences table under the 'expected-repos' key (CSV string) and
-# is editable from the Dashboard tab's Advanced sub-section. See
-# user_expected_repos() below for the read path.
-EXPECTED_REPOS = ("core", "bssweb", "doc")
+# Empty default — the effective list is computed at runtime from the
+# `github-repos` preference (each "owner/repo" contributes the repo
+# name), with the `expected-repos` preference as an override / fallback
+# when GitHub isn't configured.
+EXPECTED_REPOS: tuple[str, ...] = ()
 
 # In-flight + recently-finished clones from POST /api/primaries/clone.
 # Keyed by repo name. Each value is a dict
@@ -145,14 +146,95 @@ _PRIMARIES_CLONE_STATES: dict = {}
 _TERM_IMAGE_LOCK = threading.Lock()
 _TERM_IMAGE_QUEUE: list[dict] = []
 
-# Default git URL pattern for cloning a primary repo when the user
-# clicks the "Clone" action on the missing-primaries banner. The
-# `{repo}` placeholder is substituted with the repo name; the
-# template itself is overridable per-user via the
-# 'primaries-clone-url-template' preference. Empty by default — the
-# user must supply their own template (e.g.
-# "git@github.com:<user>/{repo}.git") via the preference.
+# Clone-URL template for primary repos. Used as a fallback when the
+# repo name isn't covered by the github-repos preference. The
+# `{repo}` placeholder is substituted with the repo name. Empty by
+# default — the user supplies a value (e.g.
+# "git@github.com:<user>/{repo}.git") via the
+# 'primaries-clone-url-template' preference if they want to clone
+# repos that aren't in their github-repos list.
 DEFAULT_PRIMARIES_CLONE_URL_TEMPLATE = ""
+
+
+def _github_repos_pref(user_slug: str) -> list[str]:
+    """Read the `github-repos` preference as a list of "owner/repo"
+    strings. Empty list when unset or malformed."""
+    try:
+        conn = db_connect()
+        try:
+            raw = get_preferences(conn, user_slug).get("github-repos")
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001
+        return []
+    if isinstance(raw, list):
+        return [str(x).strip() for x in raw if isinstance(x, str) and "/" in x]
+    if isinstance(raw, str):
+        return [s.strip() for s in raw.split(",")
+                if s.strip() and "/" in s]
+    return []
+
+
+def _git_askpass_helper() -> Path:
+    """Create (idempotent) a tiny bash script that answers git's
+    Username / Password prompts from $GIT_USERNAME / $GIT_PASSWORD.
+    Lives under the cache dir at chmod 700 so the helper is not
+    world-readable.
+
+    Using GIT_ASKPASS keeps the token out of `.git/config` (vs.
+    embedding it in the URL) and out of `ps` output (vs. passing it
+    on the command line). Token is only present in the cloning
+    subprocess's environment."""
+    cache = HOME / ".cache" / "agent-workspace"
+    cache.mkdir(parents=True, exist_ok=True)
+    helper = cache / "git-askpass.sh"
+    if not helper.is_file():
+        helper.write_text(
+            '#!/usr/bin/env bash\n'
+            'case "$1" in\n'
+            '  Username*) printf "%s" "$GIT_USERNAME" ;;\n'
+            '  Password*) printf "%s" "$GIT_PASSWORD" ;;\n'
+            'esac\n'
+        )
+        helper.chmod(0o700)
+    return helper
+
+
+def _github_owner_from_url(url: str) -> str | None:
+    """Pull the <owner> out of a GitHub HTTPS clone URL. Returns None
+    when it doesn't look like a GitHub HTTPS URL."""
+    m = re.match(
+        r"^https?://(?:[^@]+@)?github\.com/([^/]+)/[^/]+?(?:\.git)?/?$", url)
+    return m.group(1) if m else None
+
+
+def _git_clone_env(url: str) -> dict[str, str]:
+    """Build the environment for a `git clone` subprocess. For
+    https://github.com/... URLs with a token configured, wires
+    GIT_ASKPASS + GIT_USERNAME (the owner) + GIT_PASSWORD (the token).
+    Other URL shapes (ssh, scp-style, non-github) pass through with
+    the user's normal env."""
+    env = os.environ.copy()
+    # Fail fast instead of hanging on an interactive credential prompt.
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    owner = _github_owner_from_url(url)
+    token = _github._resolve_token() if owner else None
+    if owner and token:
+        env["GIT_ASKPASS"] = str(_git_askpass_helper())
+        env["GIT_USERNAME"] = owner
+        env["GIT_PASSWORD"] = token
+    return env
+
+
+def github_clone_url_for(user_slug: str, repo_name: str) -> str | None:
+    """If the user's github-repos list contains an entry whose tail
+    matches `repo_name`, return the HTTPS clone URL for it. Falls back
+    to None so callers can use the template instead."""
+    for slug in _github_repos_pref(user_slug):
+        owner, _, name = slug.partition("/")
+        if name == repo_name:
+            return f"https://github.com/{owner}/{name}.git"
+    return None
 
 
 def user_clone_url_template(conn: sqlite3.Connection, user_slug: str) -> str:
@@ -219,10 +301,14 @@ def salvage_broken_primary_clones(primaries_root: Path,
 
 
 def user_expected_repos(conn: sqlite3.Connection, user_slug: str) -> list[str]:
-    """Return the user's effective expected-repos list — their saved
-    preference (CSV in the prefs table) if present, otherwise the
-    EXPECTED_REPOS default. Names are trimmed; empty entries are
-    dropped; duplicates de-duped while preserving order."""
+    """Return the user's effective expected-repos list.
+
+    Precedence:
+      1. `expected-repos` preference (explicit CSV override).
+      2. Names derived from `github-repos` preference — each
+         "owner/repo" contributes its repo name.
+      3. The EXPECTED_REPOS baked-in default (empty in v0.1).
+    """
     try:
         raw = get_preferences(conn, user_slug).get("expected-repos")
     except Exception:  # noqa: BLE001
@@ -238,6 +324,14 @@ def user_expected_repos(conn: sqlite3.Connection, user_slug: str) -> list[str]:
             out.append(name)
         if out:
             return out
+    # No explicit override — derive from github-repos.
+    derived: list[str] = []
+    for slug in _github_repos_pref(user_slug):
+        _, _, name = slug.partition("/")
+        if name and name not in derived:
+            derived.append(name)
+    if derived:
+        return derived
     return list(EXPECTED_REPOS)
 
 
@@ -341,7 +435,7 @@ def _mcp_enabled_now() -> bool:
 def discover_repos(issue_dir: Path) -> list[Path]:
     """Return every subdirectory of `issue_dir` that looks like a git
     worktree (its `.git` entry exists), in plain alphabetical order. Used
-    everywhere we walk `~/git/worktrees/<issue>/*` so adding e.g. a
+    everywhere we walk `~/github/worktrees/<issue>/*` so adding e.g. a
     `claude-plugins` worktree surfaces on the dashboard automatically."""
     if not issue_dir.is_dir():
         return []
@@ -474,6 +568,28 @@ _SYNC_LOCK = threading.Lock()
 # counters all live in awlib.logbuf now (see imports at the top).
 # Route awlib.pricing warnings through the same structured-log path.
 _pricing.configure_logger(log_event)
+_github.configure_logger(log_event)
+
+
+def _refresh_github_config() -> None:
+    """Pull the repo list out of the user's preferences and hand it
+    to the github module. Called on startup + after every preferences
+    POST that might touch github-repos."""
+    repos: list[str] = []
+    try:
+        conn = db_connect()
+        try:
+            raw = get_preferences(conn, _user_slug()).get("github-repos")
+        finally:
+            conn.close()
+        if isinstance(raw, list):
+            repos = [str(x).strip() for x in raw if isinstance(x, str)]
+        elif isinstance(raw, str):
+            # CSV fallback so the preference is easy to seed from a shell.
+            repos = [s.strip() for s in raw.split(",") if s.strip()]
+    except Exception:  # noqa: BLE001
+        pass
+    _github.configure(repos)
 
 # Server runtime start timestamp — set in main(); read by /api/stats.
 _SERVER_START_TS = 0.0
@@ -1066,7 +1182,7 @@ CREATE TABLE IF NOT EXISTS preferences (
 -- everyone's notes side-by-side without merge conflicts.
 --
 -- tags / due_at / priority / assignee / sort_order are P4 extensions
--- (see ~/git/claude-plans/agent-workspace-enhancements.md). Old DBs
+-- (historical: schema-evolution notes lived outside the repo). Old DBs
 -- get these columns via the ALTER TABLE migration in db_connect.
 CREATE TABLE IF NOT EXISTS notes (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2512,8 +2628,8 @@ def materialize_missing_worktrees(worktrees_root: Path, primaries_root: Path | N
     from origin first if needed. Existing worktrees are never touched.
 
     `primaries_root` defaults to `worktrees_root.parent` — e.g. with
-    `--worktrees ~/git/worktrees` the primary checkouts are expected at
-    `~/git/<repo>`.
+    `--worktrees ~/github/worktrees` the primary checkouts are expected at
+    `~/github/<repo>`.
 
     Returns a list of {issue, repo, action, ok, message} dicts.
     """
@@ -2580,7 +2696,7 @@ def materialize_missing_worktrees(worktrees_root: Path, primaries_root: Path | N
 def create_issue_worktrees(worktrees_root: Path,
                             primaries_root: Path | None,
                             issue: str,
-                            base_branch: str,
+                            base_branch: str | None,
                             repos: list[str]) -> list[dict]:
     """Create per-repo worktrees for `issue` under
     worktrees_root/<issue>/<repo>.
@@ -2654,26 +2770,71 @@ def create_issue_worktrees(worktrees_root: Path,
                 )
             action_msg = f"tracked existing origin/{issue}"
         else:
-            # Resolve the base branch — try locally first, then origin/<base>.
-            base_ref = base_branch
-            check_base = subprocess.run(
-                ["git", "-C", str(primary), "rev-parse", "--verify",
-                 base_branch],
-                capture_output=True, text=True, timeout=10,
-            )
-            if check_base.returncode != 0:
-                check_origin_base = subprocess.run(
-                    ["git", "-C", str(primary), "rev-parse", "--verify",
-                     f"refs/remotes/origin/{base_branch}"],
-                    capture_output=True, text=True, timeout=10,
+            # Resolve the base branch.
+            #   - If the caller explicitly chose a branch (base_branch
+            #     truthy), try EXACTLY that one — local first, then
+            #     origin/<base>. Fail loudly when missing; do NOT
+            #     silently fall back to another branch.
+            #   - If they didn't, auto-detect from
+            #     refs/remotes/origin/HEAD (set by `git clone` to the
+            #     remote's actual default), then fall back to main /
+            #     master in that order.
+            if base_branch:
+                candidates = [base_branch]
+                allow_fallback = False
+            else:
+                candidates = []
+                head_ref = subprocess.run(
+                    ["git", "-C", str(primary), "symbolic-ref", "--short",
+                     "refs/remotes/origin/HEAD"],
+                    capture_output=True, text=True, timeout=5,
                 )
-                if check_origin_base.returncode != 0:
-                    results.append({"repo": repo, "ok": False,
-                                    "action": "failed",
-                                    "message": f"base branch '{base_branch}' "
-                                               f"not found locally or on origin"})
-                    continue
-                base_ref = f"origin/{base_branch}"
+                if head_ref.returncode == 0:
+                    default = head_ref.stdout.strip()
+                    if default.startswith("origin/"):
+                        default = default[len("origin/"):]
+                    if default:
+                        candidates.append(default)
+                for fallback in ("main", "master"):
+                    if fallback not in candidates:
+                        candidates.append(fallback)
+                allow_fallback = True
+            base_ref = None
+            tried: list[str] = []
+            for cand in candidates:
+                tried.append(cand)
+                ok_local = subprocess.run(
+                    ["git", "-C", str(primary), "rev-parse", "--verify", cand],
+                    capture_output=True, text=True, timeout=10,
+                ).returncode == 0
+                if ok_local:
+                    base_ref = cand
+                    break
+                ok_origin = subprocess.run(
+                    ["git", "-C", str(primary), "rev-parse", "--verify",
+                     f"refs/remotes/origin/{cand}"],
+                    capture_output=True, text=True, timeout=10,
+                ).returncode == 0
+                if ok_origin:
+                    base_ref = f"origin/{cand}"
+                    break
+                if not allow_fallback:
+                    break
+            if base_ref is None:
+                # Clean up the issue parent dir we just mkdir'd so a
+                # failed Add doesn't leave a stray empty folder behind.
+                try:
+                    if wt.parent.exists() and not any(wt.parent.iterdir()):
+                        wt.parent.rmdir()
+                except OSError:
+                    pass
+                msg = (f"base branch {base_branch!r} not found"
+                       if not allow_fallback
+                       else f"no base branch found — tried {', '.join(tried)}")
+                results.append({"repo": repo, "ok": False,
+                                "action": "failed",
+                                "message": msg})
+                continue
             r = subprocess.run(
                 ["git", "-C", str(primary), "worktree", "add",
                  "-b", issue, str(wt), base_ref],
@@ -2718,10 +2879,32 @@ def remove_issue_worktrees(worktrees_root: Path,
     primaries_touched: set[Path] = set()
     for repo_dir in sorted(p for p in issue_dir.iterdir() if p.is_dir()):
         repo = repo_dir.name
+        # Dotfile dirs (e.g. .claude session storage, .aider history)
+        # are never proper worktrees — clean them up silently so the
+        # final rmdir on issue_dir can succeed.
+        if repo.startswith("."):
+            try:
+                shutil.rmtree(repo_dir)
+            except OSError:
+                pass
+            continue
         primary = primaries_root / repo
         if not (primary / ".git").exists():
-            results.append({"repo": repo, "ok": False, "action": "skip",
-                            "message": f"no primary repo at {primary}"})
+            # No primary to consult, but the dir is still on disk and
+            # the user explicitly asked to remove the workspace. If
+            # the dir is either NOT a git repo at all or IS a standalone
+            # (non-worktree) repo, fall back to a plain rm -rf so the
+            # button works for hand-created folders. Refuse only when
+            # we'd lose unique work — currently we accept the deletion
+            # at face value; users can rescue from filesystem trash if
+            # needed. (Force-flag adds an extra confirmation layer.)
+            try:
+                shutil.rmtree(repo_dir)
+                results.append({"repo": repo, "ok": True, "action": "removed",
+                                "message": "removed (no primary; rm -rf fallback)"})
+            except OSError as ex:
+                results.append({"repo": repo, "ok": False, "action": "failed",
+                                "message": f"rm -rf failed: {ex}"})
             continue
         branch = ""
         if (repo_dir / ".git").exists():
@@ -3000,7 +3183,7 @@ _MAILBOX_NUDGE_PASTE = (
 )
 # The "don't ask the human to confirm" + "agent-to-agent channel
 # is autonomous" wording is already in Agent 007's system prompt
-# AND in the shared ~/git/worktrees/AGENTS.md, so we omit them
+# AND in the shared ~/github/worktrees/AGENTS.md, so we omit them
 # here and keep the nudge to a single short line. The three
 # tokens read_messages / send_message / in_reply_to are enough
 # to point claude at the right tools.
@@ -3367,7 +3550,7 @@ def gather_repo_status(wt: Path) -> dict:
     upstream = upstream_for(wt)
     # Capture the remote URL so the dashboard can build correct gitweb
     # links — the local worktree dir name often diverges from the
-    # remote path (e.g. ~/git/worktrees/<workspace>/<repo> vs.
+    # remote path (e.g. ~/github/worktrees/<workspace>/<repo> vs.
     # p=<org>/<repo>.git on gitweb).
     remote_url = _git(wt, "config", "--get", "remote.origin.url")
     remote_path = _gitweb_path_from_remote(remote_url)
@@ -3710,6 +3893,18 @@ def gather_all(worktrees_root: Path, behind_limit: int, show_ghosts: bool = Fals
     # was already populated up top so issue_agent_state could consult it.
     for issue_obj in issues:
         issue_obj["agent_running"] = issue_obj["issue"] in live_agents
+
+    # Attach GitHub issue / PR data when the integration is configured.
+    # Best-effort — a network blip just leaves the fields as None.
+    if _github.is_configured():
+        for issue_obj in issues:
+            try:
+                gh_issue = _github.issue_for_workspace(issue_obj["issue"])
+                gh_pr = _github.pr_for_workspace(issue_obj["issue"])
+            except Exception:  # noqa: BLE001
+                gh_issue = gh_pr = None
+            if gh_issue or gh_pr:
+                issue_obj["github"] = {"issue": gh_issue, "pr": gh_pr}
 
     # Attach token totals from the cached SQLite walk. agent_tokens is
     # additive — it merges this machine's locally-observed totals with any
@@ -4414,11 +4609,24 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                     for r in cloning:
                         if r in expected and r not in missing:
                             missing.append(r)
+                # Per-repo clone URLs: prefer the github-repos entry
+                # (so "Clone foo" uses https://github.com/owner/foo.git
+                # automatically) and fall back to the legacy
+                # {repo}-template if the user has one configured.
+                slug = _user_slug()
+                clone_urls: dict[str, str] = {}
+                for r in expected:
+                    gh_url = github_clone_url_for(slug, r)
+                    if gh_url:
+                        clone_urls[r] = gh_url
+                    elif tmpl:
+                        clone_urls[r] = tmpl.replace("{repo}", r)
                 self._send_json(200, {
                     "primaries_root": str(primaries_root),
                     "missing": missing,
                     "present": present,
                     "clone_url_template": tmpl,
+                    "clone_urls": clone_urls,
                     "in_flight": in_flight,
                     "recent_failures": failed,
                 })
@@ -4507,6 +4715,38 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                     })
                 finally:
                     conn.close()
+
+            elif path == "/api/github/config":
+                self._send_json(200, {
+                    "configured": _github.is_configured(),
+                    "has_token": _github.has_token(),
+                    "repos": _github.configured_repos(),
+                })
+
+            elif path == "/api/providers":
+                from awlib import providers as _providers
+                self._send_json(200, {
+                    "providers": [
+                        {"id": p.id, "display_name": p.display_name,
+                          "binary": p.binary,
+                          "installed": p.is_installed(),
+                          "supports_mcp": p.supports_mcp(),
+                          "supports_hooks": p.supports_hooks()}
+                        for p in _providers.all_providers()
+                    ],
+                })
+
+            elif path == "/api/github/issues":
+                force = qs.get("force", ["0"])[0] in ("1", "true", "yes")
+                items, err = _github.fetch_my_issues(force=force)
+                self._send_json(200, {"issues": items, "error": err,
+                                       "repos": _github.configured_repos()})
+
+            elif path == "/api/github/prs":
+                force = qs.get("force", ["0"])[0] in ("1", "true", "yes")
+                items, err = _github.fetch_my_prs(force=force)
+                self._send_json(200, {"prs": items, "error": err,
+                                       "repos": _github.configured_repos()})
 
             elif path == "/api/notes":
                 issue = (qs.get("issue", [""])[0] or "").strip() or None
@@ -4945,6 +5185,8 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                 })
             finally:
                 conn.close()
+            if "github-repos" in updates:
+                _refresh_github_config()
 
         def _do_set_backup_settings(self):
             """Body shape: {"settings": {enabled?, interval_days?, dir?, retention?}}.
@@ -5124,7 +5366,7 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                 return None
             if issue == "__agent__":
                 # Open the General Agent in the dashboard's
-                # worktrees root (e.g. ~/git/worktrees), so the
+                # worktrees root (e.g. ~/github/worktrees), so the
                 # agent's cwd is the parent of every issue dir
                 # and it can `cd <issue>` into any of them without
                 # leaving $HOME first. Falls back to $HOME if the
@@ -5204,22 +5446,27 @@ def make_handler(worktrees_root: Path, behind_limit: int,
             # CLI pick its default" — we forward None in that case so
             # build_agent_argv omits the --model flag entirely.
             model_pref = None
-            if issue == "__agent__":
+            provider_pref = "claude"
+            try:
+                conn = db_connect()
                 try:
-                    conn = db_connect()
-                    try:
-                        raw = (get_preferences(conn, _user_slug())
-                               .get("general-agent-model") or "")
-                    finally:
-                        conn.close()
+                    prefs = get_preferences(conn, _user_slug())
+                finally:
+                    conn.close()
+                raw_provider = (prefs.get("default-provider") or "").strip()
+                if raw_provider:
+                    provider_pref = raw_provider
+                if issue == "__agent__":
+                    raw = prefs.get("general-agent-model") or ""
                     if raw and raw != "default":
                         model_pref = raw
-                except Exception:  # noqa: BLE001
-                    pass
+            except Exception:  # noqa: BLE001
+                pass
             argv = agentterm.build_agent_argv(
                 issue, wt,
                 branch=issue, model=model_pref,
-                mcp_config_path=mcp_cfg_path)
+                mcp_config_path=mcp_cfg_path,
+                provider_id=provider_pref)
             env = self._agent_term_env(agent_id=issue)
             try:
                 session = agentterm.get_or_create(
@@ -5712,8 +5959,10 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                 if existing and existing.get("state") == "cloning":
                     self._send_json(202, {**existing, "repo": repo})
                     return
-            # Resolve clone URL: explicit override (validated lightly)
-            # or the user's template with {repo} substituted.
+            # Resolve clone URL — priority:
+            #   1. explicit ?url= override (validated lightly)
+            #   2. github-repos preference entry whose tail matches `repo`
+            #   3. legacy {repo}-template preference
             if url_override:
                 if not re.match(r"^(?:ssh|https?|git)://", url_override) \
                         and not re.match(r"^[^@\s]+@[^:\s]+:", url_override):
@@ -5723,12 +5972,24 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                     return
                 url = url_override
             else:
-                conn = db_connect()
-                try:
-                    tmpl = user_clone_url_template(conn, _user_slug())
-                finally:
-                    conn.close()
-                url = tmpl.replace("{repo}", repo)
+                slug = _user_slug()
+                gh_url = github_clone_url_for(slug, repo)
+                if gh_url:
+                    url = gh_url
+                else:
+                    conn = db_connect()
+                    try:
+                        tmpl = user_clone_url_template(conn, slug)
+                    finally:
+                        conn.close()
+                    url = tmpl.replace("{repo}", repo) if tmpl else ""
+                    if not url:
+                        self._send_json(400, {
+                            "error": f"no clone URL for {repo!r} — add "
+                                      f"<owner>/{repo} to the github-repos "
+                                      "preference or set a "
+                                      "primaries-clone-url-template"})
+                        return
             primaries_root.mkdir(parents=True, exist_ok=True)
             started = int(time.time())
             state = {
@@ -5775,6 +6036,7 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                          url, str(target)],
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.PIPE,
+                        env=_git_clone_env(url),
                     )
                 except (OSError, subprocess.SubprocessError) as ex:
                     error = f"{type(ex).__name__}: {ex}"
@@ -6019,7 +6281,7 @@ def make_handler(worktrees_root: Path, behind_limit: int,
         def _do_create_issue(self):
             body = self._read_json_body() or {}
             issue = (body.get("issue") or "").strip()
-            base = (body.get("base_branch") or "master").strip()
+            base = (body.get("base_branch") or "main").strip()
             # Default repos come from the user's expected-repos
             # preference (the same list that drives the missing-repo
             # placeholders + the dashboard's "+ Add issue" dialog).
@@ -6647,9 +6909,9 @@ def make_handler(worktrees_root: Path, behind_limit: int,
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agent-workspace",
-                                     description="Local dashboard server for ~/git/worktrees")
+                                     description="Local dashboard server for ~/github/worktrees")
     parser.add_argument("--worktrees", type=Path, default=DEFAULT_WORKTREES,
-                        help="Path to the worktrees root (default: ~/git/worktrees)")
+                        help="Path to the worktrees root (default: ~/github/worktrees)")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT,
                         help=f"HTTP port (default: {DEFAULT_PORT})")
     parser.add_argument("--bind", default="127.0.0.1",
@@ -6667,7 +6929,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="Don't even start the background sync thread (no manual sync either).")
     parser.add_argument("--primaries", type=Path, default=None,
                         help="Root holding the primary repo checkouts (defaults to "
-                             "<worktrees>/.. — e.g. ~/git when --worktrees=~/git/worktrees). "
+                             "<worktrees>/.. — e.g. ~/git when --worktrees=~/github/worktrees). "
                              "Used to materialize missing worktrees via `git worktree add`.")
     parser.add_argument("--no-materialize", action="store_true",
                         help="Don't auto-create local worktrees that appear in your "
@@ -6817,6 +7079,10 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as ex:  # noqa: BLE001
         log_event("warn", "sync",
                   "sync-status hydrate failed", error=str(ex))
+
+    # Wire the GitHub integration from the user's stored preferences.
+    # Token comes from $GITHUB_TOKEN or ~/.config/agent-workspace/github-token.
+    _refresh_github_config()
 
     # Decide initial enabled state. Precedence: CLI --auto-sync flag wins,
     # then DB-persisted preference, then default OFF.
