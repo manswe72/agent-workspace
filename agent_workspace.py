@@ -598,6 +598,71 @@ def _model_belongs_to_provider(model: str, provider_id: str) -> bool:
     return model in pricing
 
 
+# Female names used for auto-display-name on workspace create. Drawn
+# from multiple cultures + Greek mythology so the pool is broad and
+# the names read as distinct in a list. The dashboard picks one that
+# isn't already in use; if every name is taken (≥80 workspaces), the
+# auto-assignment is skipped and the user can rename via the ✏
+# button in the GitHub modal.
+_AGENT_NAME_POOL: tuple[str, ...] = (
+    "Ada", "Alice", "Amelia", "Anita", "Aria", "Astrid", "Athena",
+    "Aurora", "Beatrix", "Camille", "Cleo", "Cora", "Daphne", "Delia",
+    "Diana", "Eira", "Elena", "Eliza", "Emilia", "Esme", "Eva",
+    "Fern", "Flora", "Freya", "Greta", "Hannah", "Hazel", "Hedda",
+    "Helena", "Hera", "Ines", "Iris", "Isla", "Ivy", "Juno", "Kira",
+    "Lara", "Leah", "Linnea", "Livia", "Luna", "Mae", "Maja", "Maren",
+    "Mila", "Mira", "Nadia", "Naomi", "Nina", "Nora", "Octavia",
+    "Olive", "Penelope", "Petra", "Phoebe", "Rhea", "Romy", "Rosa",
+    "Saga", "Selma", "Senna", "Sigrid", "Sofia", "Stella", "Sylvie",
+    "Tessa", "Thalia", "Thea", "Tilde", "Ulla", "Vega", "Vera",
+    "Vesta", "Violet", "Wren", "Xanthe", "Yara", "Zara", "Zelda",
+    "Zoe",
+)
+
+
+def _pick_unused_agent_name(taken: set[str]) -> str | None:
+    """Pick a deterministic name from `_AGENT_NAME_POOL` that isn't
+    already in `taken`. Returns None when every pool name is used.
+    Deterministic ordering (alphabetical) makes new installs assign
+    the same first name — Alice — which is the convention this
+    dashboard's docs use as the per-workspace agent example."""
+    for name in _AGENT_NAME_POOL:
+        if name not in taken:
+            return name
+    return None
+
+
+def _assign_auto_display_name(workspace: str) -> str | None:
+    """If `workspace` doesn't already have a display name in the
+    `workspace-names` preference, pick one from the pool that isn't
+    already assigned and persist it. Returns the assigned name (or
+    None when the user already named the workspace / the pool is
+    exhausted)."""
+    try:
+        conn = db_connect()
+        try:
+            prefs = get_preferences(conn, _user_slug())
+            names = prefs.get("workspace-names")
+            names_map: dict[str, str] = {}
+            if isinstance(names, dict):
+                names_map = {str(k): str(v) for k, v in names.items() if v}
+            if workspace in names_map:
+                return None
+            taken = set(names_map.values())
+            picked = _pick_unused_agent_name(taken)
+            if picked is None:
+                return None
+            names_map[workspace] = picked
+            set_preferences(conn, _user_slug(),
+                             {"workspace-names": names_map})
+            conn.commit()
+            return picked
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _refresh_github_config() -> None:
     """Pull the repo list out of the user's preferences and hand it
     to the github module. Called on startup + after every preferences
@@ -6658,11 +6723,19 @@ def make_handler(worktrees_root: Path, behind_limit: int,
             results = create_issue_worktrees(
                 worktrees_root, primaries_root, issue, base, safe_repos)
             ok = all(r["ok"] for r in results)
+            # Auto-assign a display name on first successful create.
+            # No-op when the user already named the workspace, when
+            # the pool is exhausted, or when every per-repo step
+            # skipped/failed.
+            assigned_name = None
+            if any(r["ok"] for r in results):
+                assigned_name = _assign_auto_display_name(issue)
             self._send_json(200 if ok else 207, {
                 "issue": issue,
                 "base_branch": base,
                 "repos": safe_repos,
                 "results": results,
+                "assigned_name": assigned_name,
             })
 
         def _do_restore_sqlite(self):
@@ -6818,6 +6891,26 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                 worktrees_root, primaries_root, issue,
                 force=force, delete_branch=delete_branch)
             ok = all(r["ok"] for r in results)
+            # Drop the workspace's display name from the workspace-
+            # names preference so the auto-name pool gets the slot
+            # back. Best-effort — never fail a remove on a pref
+            # update bug.
+            if any(r["ok"] for r in results):
+                try:
+                    conn = db_connect()
+                    try:
+                        prefs = get_preferences(conn, _user_slug())
+                        names = prefs.get("workspace-names")
+                        if isinstance(names, dict) and issue in names:
+                            new_names = {k: v for k, v in names.items()
+                                          if k != issue}
+                            set_preferences(conn, _user_slug(),
+                                             {"workspace-names": new_names})
+                            conn.commit()
+                    finally:
+                        conn.close()
+                except Exception:  # noqa: BLE001
+                    pass
             self._send_json(200 if ok else 207, {
                 "issue": issue,
                 "force": force,

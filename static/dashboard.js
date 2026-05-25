@@ -6243,7 +6243,8 @@
             .map(x => `${x.repo || '·'}: ${x.message || x.action}`).join('; ');
           throw new Error(fails || d.error || `status ${r.status}`);
         }
-        showToast('ok', `created ${wsName} (${reposList.length} repo${reposList.length === 1 ? '' : 's'})`);
+        const nameSuffix = d.assigned_name ? ` · ${d.assigned_name}` : '';
+        showToast('ok', `created ${wsName} (${reposList.length} repo${reposList.length === 1 ? '' : 's'})${nameSuffix}`);
         backdrop.remove();
         document.removeEventListener('keydown', escHandler);
         await refreshAll();
@@ -8054,12 +8055,13 @@
         // Create only when EVERY repo failed, since then nothing
         // changed and a retry might genuinely help.
         const anySuccess = okCount > 0 || skipCount > 0;
+        const nameSuffix = d.assigned_name ? ` · ${d.assigned_name}` : '';
         let msg;
         if (failedCount === 0) {
           if (okCount && skipCount) {
-            msg = `✓ ${issue} · ${okCount} created, ${skipCount} already existed`;
+            msg = `✓ ${issue} · ${okCount} created, ${skipCount} already existed${nameSuffix}`;
           } else if (okCount) {
-            msg = `✓ ${issue} · ${okCount} worktree${okCount !== 1 ? 's' : ''} created`;
+            msg = `✓ ${issue} · ${okCount} worktree${okCount !== 1 ? 's' : ''} created${nameSuffix}`;
           } else {
             msg = `✓ ${issue} · ${skipCount} already existed`;
           }
