@@ -582,6 +582,11 @@
       'profile.agent.missing':  'not installed',
       'profile.agent.mcp':      'MCP',
       'profile.agent.hooks':    'hooks',
+      'profile.agent.section.default': 'DEFAULT AGENT (per-workspace agents inherit this)',
+      'profile.agent.section.general': 'GENERAL AGENT (Agent 007)',
+      'profile.agent.general.intro':   'The pinned General Agent tab launches whichever CLI you pick here. Override "Inherit default" to keep the General Agent on a different CLI than the per-workspace default.',
+      'profile.agent.general.inherit': 'Inherit default',
+      'profile.agent.general.inherit-tip': 'Use whatever the default is (currently {id}).',
       'profile.tab.model':      'Model',
       'profile.help.model':     'Model passed via `--model …` when the 🤖 Agent button opens a terminal for the currently-selected provider. Default = let the CLI pick.',
       'profile.label.model':    'Model',
@@ -1103,6 +1108,11 @@
       'profile.agent.missing':  'saknas',
       'profile.agent.mcp':      'MCP',
       'profile.agent.hooks':    'hooks',
+      'profile.agent.section.default': 'STANDARDAGENT (per-workspace ärver detta)',
+      'profile.agent.section.general': 'GENERAL AGENT (Agent 007)',
+      'profile.agent.general.intro':   'Den fasta General Agent-fliken startar det CLI du väljer här. "Ärver standard" låter den följa default-agenten ovanför.',
+      'profile.agent.general.inherit': 'Ärver standard',
+      'profile.agent.general.inherit-tip': 'Använd standardvalet (just nu {id}).',
       'profile.tab.model':      'Modell',
       'profile.help.model':     'Modell som skickas via `--model …` när 🤖 Agent-knappen startar en terminal för aktuell provider. Tom = låt CLI:t välja.',
       'profile.label.model':    'Modell',
@@ -2073,7 +2083,17 @@
   function buildProfileAgentPanel() {
     const panel = h('div', { class: 'profile-panel-section' },
       h('p', { class: 'profile-help' }, t('profile.agent.intro')),
+      h('div', { class: 'profile-section-title' },
+        t('profile.agent.section.default')),
       h('div', { class: 'agent-provider-list', id: 'agent-provider-list' },
+        h('span', { class: 'muted' }, 'loading…')),
+      h('div', { class: 'profile-section-title',
+                  style: { marginTop: '1rem' } },
+        t('profile.agent.section.general')),
+      h('p', { class: 'profile-help' },
+        t('profile.agent.general.intro')),
+      h('div', { class: 'agent-provider-list',
+                  id: 'agent-provider-list-general' },
         h('span', { class: 'muted' }, 'loading…')),
     );
     fetch('/api/providers', { cache: 'no-store' })
@@ -2082,11 +2102,15 @@
         // Cache for the tabs-visibility check below.
         window.__providersCache = d.providers || [];
         renderAgentProviderList(d.providers || []);
+        renderGeneralAgentProviderList(d.providers || []);
       })
       .catch(() => {
-        const host = panel.querySelector('#agent-provider-list');
-        if (host) host.replaceChildren(
-          h('span', { class: 'muted' }, 'failed to load providers'));
+        for (const id of ['agent-provider-list',
+                            'agent-provider-list-general']) {
+          const host = panel.querySelector('#' + id);
+          if (host) host.replaceChildren(
+            h('span', { class: 'muted' }, 'failed to load providers'));
+        }
       });
     return panel;
   }
@@ -2156,7 +2180,89 @@
     // Re-render to flip the .active class.
     fetch('/api/providers', { cache: 'no-store' })
       .then(r => r.json())
-      .then(d => renderAgentProviderList(d.providers || []))
+      .then(d => {
+        renderAgentProviderList(d.providers || []);
+        renderGeneralAgentProviderList(d.providers || []);
+      })
+      .catch(() => {});
+  }
+
+  // General Agent CLI override — same provider list as the default
+  // picker but with an extra "Inherit default" row at the top. The
+  // selected value is stored in the `general-agent-provider`
+  // preference; the launcher checks it for `issue == __agent__`
+  // and falls back to default-provider when empty.
+  function renderGeneralAgentProviderList(providers) {
+    const host = document.getElementById('agent-provider-list-general');
+    if (!host) return;
+    const current = (prefs.getItem('general-agent-provider') || '').trim();
+    const defaultId = (prefs.getItem('default-provider') || 'claude').trim();
+    const inheritRow = h('label', {
+      class: 'agent-provider-row' + ((current === '') ? ' active' : ''),
+      title: t('profile.agent.general.inherit-tip', { id: defaultId }),
+    },
+      h('input', {
+        type: 'radio', name: 'agent-provider-general',
+        value: '',
+        checked: (current === '') ? '' : null,
+        onchange: () => setGeneralAgentProvider(''),
+      }),
+      h('div', { class: 'agent-provider-body' },
+        h('div', { class: 'agent-provider-head' },
+          h('strong', {}, t('profile.agent.general.inherit')),
+          h('span', { class: 'muted' },
+            ` · ${defaultId}`),
+        ),
+      ),
+    );
+    const rows = providers.map(p => h('label', {
+      class: 'agent-provider-row'
+              + (p.installed ? '' : ' disabled')
+              + (p.id === current ? ' active' : ''),
+      title: p.installed
+        ? `binary: ${p.binary}`
+        : `binary "${p.binary}" not found on PATH`,
+    },
+      h('input', {
+        type: 'radio', name: 'agent-provider-general',
+        value: p.id,
+        checked: (p.id === current) ? '' : null,
+        disabled: p.installed ? null : '',
+        onchange: () => setGeneralAgentProvider(p.id),
+      }),
+      h('div', { class: 'agent-provider-body' },
+        h('div', { class: 'agent-provider-head' },
+          h('strong', {}, p.display_name),
+          h('span', { class: 'muted' }, ' · ', p.binary),
+          p.installed
+            ? h('span', { class: 'pill clean' }, t('profile.agent.installed'))
+            : h('span', { class: 'pill behind' }, t('profile.agent.missing')),
+        ),
+      ),
+    ));
+    host.replaceChildren(inheritRow, ...rows);
+  }
+
+  async function setGeneralAgentProvider(id) {
+    if (id) prefs.setItem('general-agent-provider', id);
+    else prefs.removeItem('general-agent-provider');
+    try {
+      await fetch('/api/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          preferences: { 'general-agent-provider': id || null },
+        }),
+      });
+      showToast('ok', id
+        ? `General Agent → ${id}`
+        : `General Agent → inherits default`);
+    } catch (err) {
+      showToast('error', `failed to save: ${err}`);
+    }
+    fetch('/api/providers', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(d => renderGeneralAgentProviderList(d.providers || []))
       .catch(() => {});
   }
 
@@ -2166,12 +2272,32 @@
   // list from `/api/providers`. Each provider gets its own pref key
   // (`agent-model.<provider-id>`) so switching the active CLI
   // restores that CLI's last-chosen model independently.
-  function buildProfileModelPanel(provider) {
-    if (!provider) {
+  function buildProfileModelPanel(activeProvider) {
+    // Show one section per installed provider that exposes a priced
+    // model list. Lets the user set each CLI's default model
+    // independently — the active provider's pick is what gets passed
+    // as --model on launch, but the user can preconfigure all of
+    // them at once. Claude Code gets its hand-curated multi-line
+    // layout; other providers get a bare radio list.
+    const providers = (window.__providersCache || [])
+      .filter(p => p.installed && (p.models || []).length > 0);
+    const sections = providers.map(p => buildOneProviderModelSection(p));
+    if (!sections.length) {
       return h('div', { class: 'profile-tab-content profile-help' },
-        'No model picker — the active provider exposes no priced model list.');
+        'No installed provider exposes a priced model list yet.');
     }
+    // Tail note pointing at the per-provider override above + the
+    // workspace-level Model column in the 🐙 GitHub modal.
+    sections.push(h('div', { class: 'profile-help',
+                              style: { marginTop: '0.8rem' } },
+      t('profile.help.model')));
+    return h('div', { class: 'profile-tab-content' }, ...sections);
+  }
+
+  function buildOneProviderModelSection(provider) {
     if (provider.id === 'claude') {
+      // Use the rich Claude-specific panel so the recommended-flag
+      // + General Agent override survive.
       return buildProfileClaudeModelPanel();
     }
     const prefKey = `agent-model.${provider.id}`;
@@ -2188,7 +2314,7 @@
     function mkRow(c) {
       return h('label', { class: 'claude-model-option' },
         h('input', {
-          type: 'radio', name: 'agent-model',
+          type: 'radio', name: `agent-model-${provider.id}`,
           value: c.id,
           checked: (c.id === current) ? '' : null,
           onchange: async (e) => {
@@ -2221,16 +2347,13 @@
         ),
       );
     }
-    return h('div', { class: 'profile-tab-content' },
-      h('div', { class: 'profile-section' },
-        h('div', { class: 'profile-group' },
-          h('div', { class: 'profile-section-title' },
-            `${provider.display_name} · ${t('profile.label.model')}`),
-          h('div', { class: 'profile-row profile-row-stacked' },
-            h('div', { class: 'claude-model-options' },
-              ...choices.map(mkRow)),
-          ),
-          h('div', { class: 'profile-help' }, t('profile.help.model')),
+    return h('div', { class: 'profile-section' },
+      h('div', { class: 'profile-group' },
+        h('div', { class: 'profile-section-title' },
+          `${provider.display_name.toUpperCase()} MODEL`),
+        h('div', { class: 'profile-row profile-row-stacked' },
+          h('div', { class: 'claude-model-options' },
+            ...choices.map(mkRow)),
         ),
       ),
     );

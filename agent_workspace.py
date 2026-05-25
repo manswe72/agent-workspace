@@ -5669,9 +5669,15 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                 raw_provider = (prefs.get("default-provider") or "").strip()
                 if raw_provider:
                     provider_pref = raw_provider
-                # Per-workspace overrides only make sense for issue-
-                # scoped agents, not the General Agent which spans
-                # everything.
+                # General Agent's own provider override — sits between
+                # the dashboard default and any (non-existent for it)
+                # per-workspace override.
+                if issue == "__agent__":
+                    ga_provider = (prefs.get("general-agent-provider")
+                                    or "").strip()
+                    if ga_provider:
+                        provider_pref = ga_provider
+                # Per-workspace overrides for issue-scoped agents.
                 ws_provider = (prefs.get(f"workspace-provider-{issue}")
                                 or "").strip()
                 if ws_provider:
