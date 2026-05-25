@@ -5810,9 +5810,17 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                     pass
                 return {}
 
+            # Built-in alias for the General Agent: the launcher names
+            # its terminal tab "Agent 007", so users and other agents
+            # naturally address it that way. Hard-coded so it works
+            # even before the user sets anything in workspace-names.
+            _GENERAL_AGENT_DEFAULT_NAME = "Agent 007"
+
             def _resolve_alias(name: str) -> str | None:
                 """name → canonical workspace id. Falls back to None
                 when no display name matches."""
+                if name == _GENERAL_AGENT_DEFAULT_NAME:
+                    return "__agent__"
                 names = _workspace_names_pref()
                 for ws_id, friendly in names.items():
                     if friendly == name:
@@ -5827,9 +5835,13 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                 live = set(_live_agents())
                 out: list[dict] = []
                 # General Agent first — it's the dashboard's pinned tab.
+                # Default display name matches the tab title users see
+                # in the launcher ("Agent 007"), so cross-agent
+                # addressing matches the on-screen label.
                 out.append({
                     "id": "__agent__",
-                    "name": names.get("__agent__") or "General Agent",
+                    "name": (names.get("__agent__")
+                              or _GENERAL_AGENT_DEFAULT_NAME),
                     "state": "active" if "__agent__" in live else "closed",
                 })
                 if worktrees_root.is_dir():
