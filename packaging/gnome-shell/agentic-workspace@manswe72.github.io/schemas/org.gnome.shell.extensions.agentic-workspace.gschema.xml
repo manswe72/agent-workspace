@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <enum id="org.gnome.shell.extensions.agentic-workspace.UiMode">
+    <value nick="quick-settings" value="0"/>
+    <value nick="panel" value="1"/>
+  </enum>
+
+  <schema id="org.gnome.shell.extensions.agentic-workspace"
+          path="/org/gnome/shell/extensions/agentic-workspace/">
+    <key name="ui-mode" enum="org.gnome.shell.extensions.agentic-workspace.UiMode">
+      <default>'quick-settings'</default>
+      <summary>UI mode</summary>
+      <description>
+        Where the server indicator lives.
+        "quick-settings" adds a tile inside GNOME's Quick Settings panel
+        (like Wi-Fi or Bluetooth). "panel" adds a classic top-bar icon
+        with a popup menu.
+      </description>
+    </key>
+
+    <key name="port" type="i">
+      <default>8765</default>
+      <range min="1" max="65535"/>
+      <summary>Server port</summary>
+      <description>
+        TCP port the dashboard server listens on. The environment
+        variable AGENT_WORKSPACE_PORT, if set, overrides this value.
+      </description>
+    </key>
+
+    <key name="show-when-stopped" type="b">
+      <default>true</default>
+      <summary>Show indicator when the server is stopped</summary>
+      <description>
+        If on, the top-bar icon stays visible (dimmed) when the server
+        is not running. If off, the icon hides entirely while stopped.
+      </description>
+    </key>
+  </schema>
+</schemalist>

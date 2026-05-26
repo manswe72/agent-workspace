@@ -207,7 +207,45 @@ the server starts on login. The per-platform mechanism is auto-detected:
 
 The autostart prompt can be skipped with `--no-autostart` or pre-answered
 yes with `--autostart`. `./install.sh --uninstall` removes whichever entry
-matches the current OS. Then:
+matches the current OS.
+
+### GNOME Shell extension (Linux)
+
+`setup.sh` also installs a GNOME Shell extension
+(`packaging/gnome-shell/agentic-workspace@manswe72.github.io/`) that puts
+the dashboard status directly in the GNOME Shell:
+
+- **Quick Settings tile** (default) — a toggle in the same panel as Wi-Fi /
+  Bluetooth / Dark Mode. Green = running, grey = stopped; click to
+  start/stop. Expand the tile for "Open dashboard" and "Copy URL".
+- **Top-bar status icon** — a classic top-bar indicator with a popup menu
+  (Running / Stopped, Start / Stop / Open / Copy URL). Switch modes in the
+  extension preferences.
+
+The extension detects the server via `/proc/net/tcp` (authoritative even
+when the pidfile is stale) and polls every 5 seconds. "Open dashboard"
+launches the PWA window if installed, otherwise falls back to `xdg-open`.
+
+Install / update manually:
+
+```bash
+cd ~/github/agent-workspace
+./setup.sh          # installs or updates the extension in place
+# then restart GNOME Shell: Alt+F2 → r → Enter  (or log out/in on Wayland)
+```
+
+Enable via the [GNOME Extensions](https://extensions.gnome.org/) app or:
+
+```bash
+gnome-extensions enable agentic-workspace@manswe72.github.io
+```
+
+Set the port or UI mode in **GNOME Extensions → Agentic Engineering
+Workspace → Preferences** (or via `gnome-extensions prefs
+agentic-workspace@manswe72.github.io`). The `AGENT_WORKSPACE_PORT`
+environment variable overrides the preference if set in the session.
+
+Then:
 
 ```bash
 agent-worktrees-server         # start the dashboard

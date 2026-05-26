@@ -168,6 +168,45 @@ running and opens the dashboard.
 Desktop notifications use `notify-send` (part of `libnotify-bin` on
 most distros; install with `sudo apt install libnotify-bin` if missing).
 
+#### GNOME Shell extension
+
+`setup.sh` also installs a GNOME Shell extension that adds an indicator
+directly into the shell UI — no browser tab needed to check server status.
+
+Two UI modes (switchable in Preferences):
+
+| Mode | Where it lives |
+|---|---|
+| **Quick Settings tile** (default) | Toggle in the same Quick Settings panel as Wi-Fi / Bluetooth. Click to start/stop; expand for Open / Copy URL. |
+| **Top-bar icon** | Classic status indicator with a popup menu (Running / Stopped, Start / Stop, Open dashboard, Copy URL). |
+
+The indicator polls every 5 s via `/proc/net/tcp` (authoritative even
+when the pidfile is stale). "Open dashboard" launches the installed PWA
+if found; otherwise falls back to `xdg-open`.
+
+After running `./setup.sh` (or `./install.sh`) you may need to restart
+GNOME Shell to pick up the new extension:
+
+- **X11**: `Alt+F2` → type `r` → Enter
+- **Wayland**: log out and back in
+
+Enable / disable via the GNOME Extensions app or:
+
+```bash
+gnome-extensions enable  agentic-workspace@manswe72.github.io
+gnome-extensions disable agentic-workspace@manswe72.github.io
+```
+
+Open preferences:
+
+```bash
+gnome-extensions prefs agentic-workspace@manswe72.github.io
+```
+
+The `AGENT_WORKSPACE_PORT` environment variable overrides the port
+preference if set in your GNOME session (`~/.profile` or
+`/etc/environment`). Supported GNOME Shell versions: 45 – 50.
+
 ### macOS
 
 The autostart entry is a LaunchAgent plist at

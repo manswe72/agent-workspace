@@ -56,6 +56,7 @@ FILES=(
   templates
   bin
   completions
+  packaging/gnome-shell
   install.sh
   setup.sh
   VERSION

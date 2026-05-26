@@ -187,6 +187,9 @@ agent-workspace/
 │   ├── build-release-tarball.sh
 │   └── release.sh
 ├── completions/           ← bash completions
+├── packaging/
+│   └── gnome-shell/
+│       └── agentic-workspace@manswe72.github.io/   ← GNOME Shell extension
 ├── tests/                 ← pytest suite
 ├── data/                  ← committed: each user's exported state
 └── README.md / AGENTS.md / INSTALL.md

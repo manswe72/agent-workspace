@@ -440,6 +440,42 @@ if [[ -f "$WT_CLAUDE_SRC" ]]; then
   fi
 fi
 
+# ── GNOME Shell extension ─────────────────────────────────────────────────
+# Install the bundled GNOME Shell extension (Linux only, optional). The
+# extension adds a Quick Settings tile / top-bar indicator that shows
+# running/stopped status and can start/stop the dashboard server.
+# We install it on any Linux desktop session; silently skip on macOS/Windows
+# or when gnome-shell isn't present.
+EXT_UUID="agentic-workspace@manswe72.github.io"
+EXT_SRC="$REPO_DIR/packaging/gnome-shell/$EXT_UUID"
+EXT_DST="${HOME}/.local/share/gnome-shell/extensions/$EXT_UUID"
+OLD_EXT_DST="${HOME}/.local/share/gnome-shell/extensions/agentic-workspace@billiant.com"
+
+if [[ "$(uname -s)" == "Linux" && -d "$EXT_SRC" ]]; then
+  # Remove the old billiant.com UUID directory if present.
+  if [[ -d "$OLD_EXT_DST" ]]; then
+    rm -rf "$OLD_EXT_DST"
+    info "Removed old extension UUID directory ($OLD_EXT_DST)"
+  fi
+  mkdir -p "$EXT_DST/schemas" "$EXT_DST/icons"
+  cp "$EXT_SRC/metadata.json" "$EXT_SRC/extension.js" "$EXT_SRC/prefs.js" "$EXT_DST/"
+  cp "$EXT_SRC/icons/agentic-symbolic.svg" "$EXT_DST/icons/"
+  cp "$EXT_SRC/schemas/org.gnome.shell.extensions.agentic-workspace.gschema.xml" \
+     "$EXT_DST/schemas/"
+  if command -v glib-compile-schemas >/dev/null 2>&1; then
+    glib-compile-schemas "$EXT_DST/schemas/" 2>/dev/null || true
+  fi
+  ok "Installed GNOME Shell extension → $EXT_DST"
+  if command -v gnome-extensions >/dev/null 2>&1; then
+    gnome-extensions enable "$EXT_UUID" 2>/dev/null && \
+      ok "Extension enabled (will be live after GNOME Shell restart)" || \
+      info "Enable manually: gnome-extensions enable $EXT_UUID"
+  else
+    info "Enable manually via GNOME Extensions app or:"
+    info "  gnome-extensions enable $EXT_UUID"
+  fi
+fi
+
 # ── Opt-in sync repo configuration ───────────────────────────────────────
 # The dashboard can mirror its synced state (commits.jsonl, worktrees.json)
 # into a git repo of the user's choice so multiple machines see the same

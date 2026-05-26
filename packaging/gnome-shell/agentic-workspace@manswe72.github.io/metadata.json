@@ -1,0 +1,8 @@
+{
+  "uuid": "agentic-workspace@manswe72.github.io",
+  "name": "Agentic Engineering Workspace",
+  "description": "Indicator for the agent-workspace dashboard server. Choose between a GNOME Quick Settings tile (default) and a classic top-bar status icon. Both show running/stopped status and start/stop the server.",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "url": "https://github.com/manswe72/agent-workspace",
+  "settings-schema": "org.gnome.shell.extensions.agentic-workspace"
+}
