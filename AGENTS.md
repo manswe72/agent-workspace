@@ -1,9 +1,9 @@
 # Setting up `agent-workspace`
 
-A small local HTTP dashboard that shows the state of every
-`~/github/worktrees/<issue>/<repo>` and surfaces a GitHub-style activity heatmap
-of *your* commits. Status is collected on demand; activity is persisted to
-SQLite and (optionally) synced across machines via this very repo.
+A local HTTP dashboard for monitoring git worktrees across every
+`~/github/worktrees/<issue>/<repo>`, agent-to-agent messaging, time
+tracking, GitHub integration, and an embedded agent terminal. State
+is persisted to SQLite and optionally synced across machines.
 
 ## ⛔ HARD STOP — agents must NEVER restart the agent-workspace server
 
@@ -29,56 +29,61 @@ If a code change you made needs the server to pick it up, **say so and stop**
 This is a hard rule, not a preference. There is no scenario in which an
 agent should restart this server.
 
-## One-machine setup
+## Quick start
 
 ```bash
+# Release install (end-user path)
+curl -fsSLO https://github.com/manswe72/agent-workspace/releases/latest/download/agent-workspace.tar.gz
+tar xzf agent-workspace.tar.gz
+cd agent-workspace-*/
+./install.sh
+agent-worktrees-server
+
+# Developer install (hacking on the source)
 git clone <agent-workspace-url> ~/github/agent-workspace
-~/github/agent-workspace/bin/agent-worktrees-server
-# or:
-python3 ~/github/agent-workspace/agent_workspace.py
+cd ~/github/agent-workspace
+./setup.sh
+agent-worktrees-server
 ```
 
-The server prints its URL (default `http://127.0.0.1:8765`) and opens your
-default browser to it. CLI flags:
+The server prints its URL (default `http://127.0.0.1:8765`) and opens
+your default browser. CLI flags:
 
 | Flag | Default | Purpose |
 |---|---|---|
-| `--worktrees PATH` | `~/github/worktrees` | Root that contains one dir per active issue |
+| `--worktrees PATH` | `~/github/worktrees` | Root containing one dir per active issue |
 | `--port N` | `8765` | HTTP port |
 | `--behind N` | `50` | Warn when a branch is more than N commits behind upstream |
 | `--no-open` | — | Don't pop a browser tab on startup |
-| `--sync-interval N` | `300` | Auto-sync loop interval in seconds (export + commit + push + fetch + pull) |
+| `--sync-interval N` | `300` | Auto-sync loop interval in seconds |
 | `--no-sync` | — | Disable auto-sync entirely |
 
-## What the server does
+## Key endpoints
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /` | The dashboard HTML. State data is inlined as JSON for the JS to consume. |
-| `GET /api/status[?show_ghosts=1]` | JSON snapshot of every worktree currently on disk (and, optionally, "ghost" worktrees that have been removed). Re-fetched by the browser every 5 minutes. |
-| `GET /api/heatmap` | Zero-filled commit-per-day series for the last 365 days, used to render the heatmap card. |
-| `POST /api/open-agent-tab` | Body `{issue: "<workspace>"}`. Spawns `bin/agent-worktrees --issue=<key>` to open a single new gnome-terminal tab attached to the user's existing window with `claude --continue` running in the right worktree. Triggered by the per-issue "💻 Console" button. |
-| `GET /favicon.ico` | Redirects to the inline SVG favicon. |
-| `GET /static/{dashboard.css,dashboard.js,favicon.svg}` | Static assets. |
+| `GET /` | Dashboard HTML |
+| `GET /api/status[?show_ghosts=1]` | JSON snapshot of every worktree on disk |
+| `GET /api/heatmap` | Commit-per-day series (365 days) for the heatmap card |
+| `GET /api/github/issues` | Open issues in configured repos |
+| `GET /api/github/prs` | Open PRs in configured repos |
+| `POST /api/github/issue/create` | Create a GitHub issue and optionally its local worktree |
+| `POST /api/github/prs/my-closed` | Fetch the calling user's closed/merged PRs |
+| `GET /api/mcp/delegations` | Delegation board (hub-and-spoke MCP) |
+| `GET /mcp` | MCP JSON-RPC 2.0 endpoint for agent-to-agent messaging |
+| `GET /static/{dashboard.css,dashboard.js,…}` | Static assets |
+
+All routes are listed in the **API** tab of the dashboard's help overlay
+(press `?` in the dashboard).
 
 ## How sync works
 
-The server keeps a small SQLite cache at
-`~/.cache/agent-workspace/activity.sqlite` with two tables:
+The server keeps a SQLite cache at
+`~/.cache/agent-workspace/activity.sqlite`. On every auto-sync tick the
+server:
 
-- `commits` — every commit *you* (matching `git config user.email`'s
-  local-part) authored on a worktree's branch, used for the heatmap.
-- `worktrees` — last-known status of every worktree the server has seen
-  (so the dashboard can surface "ghost" worktrees that no longer exist
-  on disk).
-
-On every auto-sync tick (default every 5 min) the server:
-
-1. Exports the SQLite cache to `data/<your-user-slug>/commits.jsonl` +
-   `worktrees.json` (your-user-slug is the local-part of your
-   `git config user.email`).
-2. If those files changed, runs `git add → commit → push` on the
-   `agent-workspace` repo so other machines can see the new state.
+1. Exports the SQLite cache to `data/<your-user-slug>/` in this repo.
+2. If those files changed, runs `git add → commit → push`.
 3. Runs `git fetch origin`. If origin has advanced, `git pull --ff-only`
    and replays every `data/*/` folder back into SQLite.
 
@@ -88,96 +93,119 @@ Manual one-shot sync (server doesn't have to be running):
 ~/github/agent-workspace/bin/agent-workspace-sync
 ```
 
-## New machine
+## MCP — agent-to-agent messaging
+
+The dashboard runs an in-process MCP server at `/mcp`. Claude Code,
+Codex CLI, Cursor Agent, and Gemini CLI sessions auto-register it at
+launch. Eight tools are exposed:
+
+### Standard tools (all agents)
+
+| Tool | What it does |
+|---|---|
+| `read_messages(unread_only?, limit?)` | Check inbox. Call at the start of every turn. |
+| `send_message(to, text, in_reply_to?)` | Send to a workspace id, display name, or `__agent__`. |
+| `request_review(target, ref, context?)` | Drop a `review_request` into another agent's inbox. |
+| `list_agents(live_only?)` | List every agent id + display name + state. |
+| `broadcast_message(text)` | Fan one message to every live workspace agent. |
+
+### Hub-and-spoke tools (General Agent only)
+
+| Tool | What it does |
+|---|---|
+| `delegate(to, task, context?, deadline?)` | Hand work to a spoke and track completion. Use instead of `send_message` when you need a reply. |
+| `route(pattern, text, exclude_self?)` | Fan to every agent whose id/name matches a substring or `/regex/`. |
+| `list_delegations(status?, mine_only?, to_me?)` | Delegation status board — open / resolved, sender, recipient, reply text. |
+
+Workspace agents that call `delegate` receive an error (they're spokes,
+not hubs). The **🎯 Delegations** sub-tab in the dashboard renders the
+board live, auto-refreshed every 5 seconds.
+
+## Developer tooling
 
 ```bash
-git clone <agent-workspace-url> ~/github/agent-workspace
-python3 ~/github/agent-workspace/agent_workspace.py --worktrees /elsewhere/worktrees
+# Run tests
+pytest tests/
+
+# Lint
+ruff check .
+
+# Build a release tarball
+./bin/build-release-tarball.sh
+# → dist/agent-workspace-<VERSION>.tar.gz
+
+# Cut a full GitHub release (tag + tarball + release notes)
+./bin/release.sh
+./bin/release.sh --version 0.2.0
+./bin/release.sh --dry-run
 ```
 
-On startup the server hydrates the local SQLite cache from every `data/*/`
-subfolder it finds, so the new machine's dashboard is populated immediately.
-The auto-sync loop then keeps it in step with the other machines.
+The pre-push hook (installed by `setup.sh`) runs `ruff` + `pytest`
+automatically before every `git push`.
 
-## Multi-user
+## New machine / multi-user
 
-This repo is safe for multiple users to share. Each user writes only to their
-own `data/<user-slug>/` subfolder, so `git pull` cannot conflict on
-different users' state. Imports merge everything in, so on a shared dashboard
-you'll see colleagues' worktrees as well as your own. The heatmap is filtered
-by the local user, so it shows *your* commits only, regardless of how many
-people are syncing into the repo.
+Each user writes only to their own `data/<user-slug>/` subfolder. The
+heatmap is filtered by the local `git config user.email` so it always
+shows *your* commits only, regardless of how many people are syncing.
 
 ## Run as a container (podman or docker)
 
-The repo ships a `Dockerfile` + `compose.yaml`. The image is ~230 MB and only
-needs Python + git + ssh client.
-
 ```bash
-# build once
 podman build -t agent-workspace:latest .
-
-# run (compose handles the volume mounts described in compose.yaml)
 podman compose up -d
 # → http://127.0.0.1:8765/
 ```
 
-Or one-shot without compose:
-
-```bash
-podman run -d --name agent-workspace \
-  -p 127.0.0.1:8765:8765 \
-  -v "$HOME/github/worktrees:/worktrees:rw" \
-  -v "$HOME/git:/primaries:rw" \
-  -v "$HOME/github/agent-workspace:/app:rw" \
-  -v "$HOME/.ssh:/root/.ssh:ro" \
-  agent-workspace:latest
-```
-
-Mount semantics:
-
-| Host path | Container path | Why |
-|---|---|---|
-| `~/github/worktrees` | `/worktrees` (`rw`) | What the dashboard reads. Read-write so the server can `git worktree add` to materialize missing entries. |
-| `~/git` | `/primaries` (`rw`) | Where the primary repo checkouts live (`core`, `bssweb`, `doc`, …). `rw` because `git fetch` and `git worktree add` write inside `.git/`. |
-| `~/github/agent-workspace` | `/app` (`rw`) | The repo whose `data/` is the sync mirror. Mounted so commits/pushes flow to the host's checkout. |
-| `~/.ssh` | `/root/.ssh` (`ro`) | SSH keys for `ssh://` git remotes. |
-
-Caveats:
-
-- The **"🖥 Open in terminal tabs"** button does NOT work inside a container — it shells out to `gnome-terminal` and there isn't one. Run `bin/agent-worktrees` on the host directly when you want that.
-- The server binds `0.0.0.0:8765` inside the container; the compose port mapping pins the host side to `127.0.0.1` so it isn't reachable from your network.
+Mount semantics are in `compose.yaml`. The agent terminal, editor open
+buttons, and console buttons don't work inside the container — run the
+server on the host when you want those.
 
 ## Layout
 
 ```
 agent-workspace/
+├── VERSION                ← committed release tag
 ├── agent_workspace.py    ← single-file stdlib server (Python 3.10+)
-├── static/                ← dashboard CSS / JS / favicon
+├── awlib/                 ← split-out helpers: backup, agent runtime, MCP, GitHub
+│   ├── agent_mcp.py       ← MCP JSON-RPC server + hub-and-spoke tools
+│   └── github.py          ← GitHub REST helpers (issues, PRs, create)
+├── install.sh             ← tarball-aware end-user installer
+├── setup.sh               ← per-machine developer installer (symlinks, hooks)
+├── templates/
+│   └── worktrees-AGENTS.md   ← installed to ~/github/worktrees/AGENTS.md
+├── static/                ← dashboard CSS / JS / manifest / sw.js
 ├── bin/
-│   ├── agent-worktrees-server   ← thin Python wrapper
-│   ├── agent-worktrees          ← opens one terminal tab per worktree
-│   └── agent-workspace-sync     ← manual one-shot of the auto-sync tick
+│   ├── agent-worktrees-server
+│   ├── agent-worktrees-restart
+│   ├── agent-worktrees-stop
+│   ├── agent-worktrees
+│   ├── agent-workspace-launch   ← desktop launcher (--app= PWA style)
+│   ├── agent-workspace-sync
+│   ├── agent-event-notify
+│   ├── agent-mailbox-inject
+│   ├── build-release-tarball.sh
+│   └── release.sh
+├── completions/           ← bash completions
+├── tests/                 ← pytest suite
 ├── data/                  ← committed: each user's exported state
-│   ├── README.md
-│   ├── .gitattributes     (commits.jsonl uses union merge)
-│   └── <user-slug>/...
-├── README.md
-└── AGENTS.md              ← this file
+└── README.md / AGENTS.md / INSTALL.md
 ```
 
 ## Troubleshooting
 
 - **No commits in heatmap.** The scan filters by the local-part of
-  `git config user.email`. If you've changed that recently, your old commits
-  (under a different domain) are still picked up because the match uses the
-  local-part only.
-- **`auto-sync disabled` on startup.** You launched with `--no-sync` or
+  `git config user.email`. If you've changed that recently, old commits
+  under a different domain are still picked up (local-part match only).
+- **Events not appearing.** Run `./setup.sh --enable-claude-hooks` once
+  per machine.
+- **`auto-sync disabled` on startup.** You launched with `--no-sync` /
   `--sync-interval=0`.
 - **Sync errors in stderr.** Most are non-fatal: missing remote, push auth
-  issues, or origin diverged so `pull --ff-only` declined. The loop logs the
-  error and continues.
-- **Ghost worktrees not appearing.** Make sure the "Show removed worktrees"
-  toggle in the toolbar is on — they're hidden by default.
-- **Browser shows stale data.** The dashboard auto-refreshes every 5 min; use
-  the "↻ Refresh now" button for an immediate refetch.
+  issues, or origin diverged so `pull --ff-only` declined.
+- **Ghost worktrees not appearing.** Toggle "Show removed worktrees" in
+  the toolbar filters row.
+- **Browser shows stale data.** Use the `↻ Refresh now` button.
+- **Update button greyed out.** This is a release install (no `.git/`
+  directory). Re-run the `curl` quick-start to upgrade, or switch to a
+  developer install with `git clone` + `./setup.sh`.

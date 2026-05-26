@@ -79,17 +79,21 @@ calls get 5000 req/h.
   `42-fix-auth`) auto-link to issue `#42`. A green `#42` pill on
   the tab opens the issue; a `PR` pill appears next to it when a
   PR's head branch matches the workspace name.
-- **🐙 GitHub modal** (toolbar button) — two tables:
+- **🐙 GitHub modal** (toolbar button) — three tables:
   - **Issues assigned to you** — Repo / # / Title / State / Workspace
     / Model / Actions columns. **+ Add** opens a per-issue dialog
     with checkboxes for each configured repo (defaults to all) so
-    multi-repo issues can clone just the relevant subset.
+    multi-repo issues can clone just the relevant subset; an
+    **Also create GitHub issue** checkbox optionally opens a GitHub
+    issue at the same time (title + body, auto-assigned to you).
     **🗑 Remove** walks `/api/issue/remove` and surfaces partial
     failures.
   - **Open issues (no assignee)** — same column shape; **+ Add**
     prompts to claim (assign yourself) before creating the worktree.
   - **Open PRs** — Repo / # / Title / State / Workspace columns.
-    Lists every open PR in the configured repos.
+    Lists every open PR in the configured repos. A **My recent closed
+    / merged PRs** sub-section shows your own merged and closed PRs
+    (separate from the full open-PR list, which would grow unbounded).
 - **Missing-primary banner** — auto-derived from the `github-repos`
   preference. Clone buttons use `https://github.com/<owner>/<repo>.git`
   with your PAT via `GIT_ASKPASS`; the token never lands in
@@ -148,6 +152,27 @@ Inside each tab:
   rollup (token totals, cost, top tools, last prompt) parsed from
   `~/.claude/projects/<encoded>/*.jsonl`; for other providers the
   panel is launcher-only (no per-message activity yet).
+
+  The Agent block has **sub-tabs** selectable from the bar above it:
+
+  | Sub-tab | Per-issue workspace | General Agent |
+  |---|---|---|
+  | **Agent** | Inline terminal | Inline terminal |
+  | **Branches** | Branches across the issue's worktrees | — |
+  | **Messages** | — | Agent-to-agent inbox/outbox |
+  | **Delegations 🎯** | Delegations assigned to this workspace | Hub delegation board |
+  | **Stashes** | Stashes filtered to this issue | All stashes across primaries |
+
+  In **fullscreen mode** (`⤢` button or `F` shortcut) the sub-tab row
+  stays visible with pinned **Exit fullscreen** and **◀ ▶** navigation
+  buttons so you can switch sub-tabs and move between workspaces without
+  leaving fullscreen.
+
+  Each workspace tab also has a **Create PR** button (when the workspace
+  has a branch with unpushed or pushed commits) that opens a dialog
+  pre-filled with the branch name, lets you choose base branch, write
+  a title and body, and optionally force-push before opening the PR via
+  the GitHub REST API.
 
 ## Quick start
 
@@ -333,7 +358,22 @@ browsers (Chrome, Edge, Brave, Arc, Vivaldi) expose an **Install Claude
 Workspace…** prompt in the address bar (or three-dot menu → Apps →
 Install). Safari 17+ supports it via **File → Add to Dock…**. On GNOME
 the Files app exposes the same as **Install as App** when you're in
-Chromium. Installing gives you:
+Chromium.
+
+There's also a **📥 Install app** button in the dashboard toolbar — it
+triggers the browser's native install prompt directly, so you don't have
+to hunt through browser menus. The button only appears when the browser
+has signalled that the PWA is installable (i.e., the `beforeinstallprompt`
+event has fired — Chromium-based browsers only; Firefox does not support
+PWA install).
+
+When the server is launched via the `agent-workspace-launch` helper (the
+desktop entry installed by `setup.sh`) it uses `--app=<URL>` on
+Chromium-family browsers to open a standalone chromeless window, skipping
+the install step entirely for a native-app look. Falls back to
+`xdg-open` / `open` for Firefox / Safari users.
+
+Installing gives you:
 
 - a standalone window without browser chrome,
 - a dock / launcher icon + ⌘-Tab / Alt-Tab entry,
@@ -408,6 +448,20 @@ the `?agent=<id>` query (Claude Code) or the `X-Agent-Id` header
 | `request_review(target, ref, context?)` | Convenience wrapper that drops a structured `review_request` (with a git sha / branch / path in `ref`) into the target's mailbox. |
 | `list_agents(live_only?)` | Returns every agent id + display name + state. Use before `send_message` to pick a recipient that's actually online. |
 | `broadcast_message(text)` | Fan one message out to every live workspace agent (the General Agent + the caller are excluded). |
+
+Three additional **hub-and-spoke tools** are available to the General Agent only
+(workspace agents that try to call `delegate` get an error — they're spokes,
+not hubs):
+
+| Tool | What it does |
+|---|---|
+| `delegate(to, task, context?, deadline?)` | Hand a piece of work to a specific workspace agent and track its completion. The recipient sees a `📋 Delegation` message. Their `send_message` reply (with `in_reply_to=<delegation_id>`) marks it resolved. Use this instead of `send_message` when you need an answer back. |
+| `route(pattern, text, exclude_self?)` | Fan a message to every agent whose id or display name matches a substring (e.g. `'docs'`) or regex (e.g. `'/^[0-9]+-/'`). Caps regex length at 128 chars. |
+| `list_delegations(status?, mine_only?, to_me?)` | Status board — every delegation with its state (`open` / `resolved`), sender, recipient, and resolver reply. The Delegations sub-tab in the dashboard calls this automatically; agents can also call it directly with `to_me=true` to see what's been delegated to them. |
+
+The **🎯 Delegations** sub-tab on both the General Agent panel and each workspace
+panel shows this board live, auto-refreshed every 5 seconds. Status chips
+(`open` / `resolved`) are click-to-filter.
 
 How agents pick up new mail:
 
