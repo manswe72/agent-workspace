@@ -30,6 +30,13 @@ import re
 import sqlite3
 import time
 
+# Detects classic catastrophic-backtracking shapes in a user-supplied
+# regex: a parenthesised group whose body contains a quantifier and
+# which is itself quantified — (a+)+, (a*)*, (.*)+, (a+){2,}, …. Used
+# by the `route` MCP tool to reject ReDoS-prone patterns (CodeQL
+# py/regex-injection, alert #17).
+_REDOS_SHAPE = re.compile(r"\([^()]*[*+][^()]*\)[*+{]")
+
 # ── Schema ────────────────────────────────────────────────────────────────
 
 # Table-only DDL — runs first. Indexes are created in init_db AFTER
@@ -938,6 +945,18 @@ class McpServer:
                     "regex pattern too long (max 128 chars) — "
                     "this surface is for workspace-tag matching, "
                     "not arbitrary expression evaluation")
+            # Reject classic catastrophic-backtracking shapes — a
+            # quantified group whose body is itself quantified, e.g.
+            # (a+)+, (a*)*, (.*)+, (a+){2,}. Belt-and-braces over the
+            # 128-char cap above (CodeQL py/regex-injection, alert
+            # #17): the haystack is ~5 short agent ids so blow-up is
+            # already bounded to milliseconds, but rejecting the shape
+            # keeps the surface clean regardless of haystack growth.
+            if _REDOS_SHAPE.search(inner):
+                raise ValueError(
+                    "regex pattern contains a nested-quantifier shape "
+                    "prone to catastrophic backtracking — simplify it "
+                    "(this surface only needs to match workspace tags)")
             try:
                 regex = re.compile(inner, re.IGNORECASE)
             except re.error as ex:

@@ -212,6 +212,35 @@ def test_route_regex_pattern(server, conn):
         "42-fix-auth", "99-docs-cleanup", "7-frontend"}
 
 
+@pytest.mark.parametrize("pattern", [
+    "/(a+)+/", "/(a*)*/", "/(.*)+/", "/(x+)*/", "/(ab+)+/", "/(a+){2,}/",
+])
+def test_route_rejects_redos_shape(server, conn, pattern):
+    # Nested-quantifier shapes are refused before re.compile
+    # (py/regex-injection, alert #17) and nothing is queued.
+    text, err = _call(server, "__agent__", "route",
+                       {"pattern": pattern, "text": "x"})
+    assert err
+    assert "catastrophic backtracking" in text
+    assert conn.execute(
+        "SELECT COUNT(*) FROM agent_messages").fetchone()[0] == 0
+
+
+def test_route_rejects_overlong_regex(server, conn):
+    text, err = _call(server, "__agent__", "route",
+                       {"pattern": "/" + "a" * 129 + "/", "text": "x"})
+    assert err
+    assert "too long" in text
+
+
+def test_route_allows_benign_quantifier(server, conn):
+    # A single (non-nested) quantifier is fine — must still route.
+    text, err = _call(server, "__agent__", "route",
+                       {"pattern": "/^[0-9]+-/", "text": "ok"})
+    assert not err
+    assert "3 agent" in text
+
+
 def test_route_no_matches(server, conn):
     text, err = _call(server, "__agent__", "route",
                        {"pattern": "zzz-nothing", "text": "x"})
