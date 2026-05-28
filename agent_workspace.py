@@ -22,8 +22,10 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import base64
 import gzip
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -145,6 +147,82 @@ _PRIMARIES_CLONE_STATES: dict = {}
 # Drained by GET /api/terminal-image/pending.
 _TERM_IMAGE_LOCK = threading.Lock()
 _TERM_IMAGE_QUEUE: list[dict] = []
+
+
+def _sniff_image_format(header: bytes) -> str | None:
+    """Return the image format implied by the leading magic bytes, or
+    None if `header` is not a recognised image.
+
+    Used to gate the /api/terminal-image `file=` reader on content,
+    not just path: a text secret (SSH key, token) never carries an
+    image magic number, so it is rejected regardless of where it
+    lives under $HOME.
+    """
+    if header.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if header.startswith(b"\xff\xd8\xff"):
+        return "jpeg"
+    if header.startswith((b"GIF87a", b"GIF89a")):
+        return "gif"
+    if header[:4] == b"RIFF" and header[8:12] == b"WEBP":
+        return "webp"
+    return None
+
+
+def _bind_is_loopback(host: str) -> bool:
+    """True when `host` is a loopback bind (the request surface is then
+    only reachable from this machine). A non-loopback bind — e.g.
+    `--bind 0.0.0.0` in Docker — exposes the endpoint to the network."""
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return host == "localhost"
+
+
+def _read_terminal_image_file(file_path: str, *, bind_host: str,
+                              home_root: Path | None = None
+                              ) -> tuple[str | None, tuple[int, str] | None]:
+    """Resolve + validate a `file=` path for /api/terminal-image and
+    return its base64-encoded bytes.
+
+    Returns `(b64_data, None)` on success or `(None, (status, msg))`
+    on rejection.
+
+    Hardens the path-injection surface (CodeQL py/path-injection,
+    alert #16). The old `$HOME` containment check blocked paths
+    *outside* HOME but let any caller read *any* file under HOME —
+    `~/.ssh/id_rsa`, `~/.config/agent-workspace/github-token`, etc. —
+    and the bytes were queued for exfiltration via the polling
+    endpoint. Two independent gates close that:
+
+      * bind gate — when the server is not bound to loopback (Docker
+        `--bind 0.0.0.0`), `file=` reads are refused outright; the
+        browser must base64 the bytes itself and send `data=`.
+      * content gate — only byte streams whose magic number is a
+        known image format (PNG/JPEG/GIF/WEBP) are accepted, so text
+        secrets are rejected whatever their path.
+    """
+    if not _bind_is_loopback(bind_host):
+        return None, (403,
+            "file= is disabled when the server is not bound to "
+            "loopback; send the image bytes as data= instead")
+    try:
+        abs_file = Path(file_path).expanduser().resolve(strict=False)
+        root = (home_root or Path.home()).resolve(strict=False)
+        abs_file.relative_to(root)
+    except (OSError, ValueError):
+        return None, (400, "file path must be inside $HOME")
+    if not abs_file.is_file():
+        return None, (400, f"not a regular file: {abs_file}")
+    try:
+        with open(abs_file, "rb") as fh:
+            blob = fh.read()
+    except OSError as exc:
+        return None, (400, str(exc))
+    if _sniff_image_format(blob[:16]) is None:
+        return None, (400,
+            "file is not a recognised image (PNG/JPEG/GIF/WEBP)")
+    return base64.b64encode(blob).decode(), None
 
 # Clone-URL template for primary repos. Used as a fallback when the
 # repo name isn't covered by the github-repos preference. The
@@ -6227,7 +6305,6 @@ def make_handler(worktrees_root: Path, behind_limit: int,
             The dashboard polls GET /api/terminal-image/pending every second
             and writes the IIP escape sequence directly to xterm.js.
             """
-            import base64 as _b64
             body = self._read_json_body() or {}
             issue = (body.get("issue") or "").strip()
             if not issue:
@@ -6236,31 +6313,21 @@ def make_handler(worktrees_root: Path, behind_limit: int,
             data = body.get("data", "")
             file_path = body.get("file", "")
             if not data and file_path:
-                # Defence against the "file-read-anywhere" CodeQL
-                # alert: constrain the path to the user's HOME (which
-                # transitively covers the worktrees root + the
-                # dashboard's own cache + the user's pictures dir).
-                # Drag-and-drop in the dashboard always points at
-                # files under HOME, so this is just hardening — no
-                # legitimate caller is rejected.
-                try:
-                    abs_file = Path(file_path).expanduser().resolve(
-                        strict=False)
-                    home_root = Path.home().resolve(strict=False)
-                    abs_file.relative_to(home_root)
-                except (OSError, ValueError):
-                    self._send_json(400, {
-                        "error": "file path must be inside $HOME"})
-                    return
-                if not abs_file.is_file():
-                    self._send_json(400, {
-                        "error": f"not a regular file: {abs_file}"})
-                    return
-                try:
-                    with open(abs_file, "rb") as fh:
-                        data = _b64.b64encode(fh.read()).decode()
-                except OSError as exc:
-                    self._send_json(400, {"error": str(exc)})
+                # Path-injection hardening (CodeQL py/path-injection,
+                # alert #16). The old containment-in-$HOME check let any
+                # caller read any file under HOME (SSH keys, the
+                # dashboard's own PAT) and queue its bytes for
+                # exfiltration. _read_terminal_image_file adds a
+                # loopback-bind gate + an image-magic-byte content
+                # check; drag-and-drop in the dashboard sends real
+                # image bytes under HOME, so no legitimate caller is
+                # rejected. server_address[0] is the post-bind host.
+                bind_host = self.server.server_address[0]
+                data, err = _read_terminal_image_file(
+                    file_path, bind_host=bind_host)
+                if err is not None:
+                    status, msg = err
+                    self._send_json(status, {"error": msg})
                     return
             if not data:
                 self._send_json(400, {"error": "data or file is required"})

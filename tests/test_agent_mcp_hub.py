@@ -212,6 +212,57 @@ def test_route_regex_pattern(server, conn):
         "42-fix-auth", "99-docs-cleanup", "7-frontend"}
 
 
+@pytest.mark.parametrize("pattern", [
+    "/(a+)+/", "/(a*)*/", "/(.*)+/", "/(x+)*/", "/(ab+)+/", "/(a+){2,}/",
+    "/(a|a)+/",      # alternation explosion
+    "/(a|ab)*/",     # alternation explosion
+    "/((a)+)+/",     # nested quantified group
+    "/(?:a+)+/",     # non-capturing outer group still ReDoS
+])
+def test_route_rejects_redos_shape(server, conn, pattern):
+    # Catastrophic-backtracking shapes are refused before re.compile
+    # (py/regex-injection, alert #17) and nothing is queued.
+    text, err = _call(server, "__agent__", "route",
+                       {"pattern": pattern, "text": "x"})
+    assert err
+    assert "catastrophic backtracking" in text
+    assert conn.execute(
+        "SELECT COUNT(*) FROM agent_messages").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("pattern", [
+    "/(ab)+/",          # single linear group — no inner branching
+    "/(?:fix|feat)-/",  # alternation in a NON-quantified group
+    "/[a-z]+/",
+    "/[A-Z]{3}-\\d+/",
+    "/^[0-9]+-/",
+    "/docs|core/",
+    "/(a+)?/",          # optional, not repeated — bounded
+])
+def test_route_allows_linear_patterns(server, conn, pattern):
+    # Genuinely-linear patterns must pass the ReDoS gate (no false
+    # positives) — they may match 0 agents, but must not error.
+    text, err = _call(server, "__agent__", "route",
+                       {"pattern": pattern, "text": "x"})
+    assert not err, text
+    assert "catastrophic backtracking" not in text
+
+
+def test_route_rejects_overlong_regex(server, conn):
+    text, err = _call(server, "__agent__", "route",
+                       {"pattern": "/" + "a" * 129 + "/", "text": "x"})
+    assert err
+    assert "too long" in text
+
+
+def test_route_allows_benign_quantifier(server, conn):
+    # A single (non-nested) quantifier is fine — must still route.
+    text, err = _call(server, "__agent__", "route",
+                       {"pattern": "/^[0-9]+-/", "text": "ok"})
+    assert not err
+    assert "3 agent" in text
+
+
 def test_route_no_matches(server, conn):
     text, err = _call(server, "__agent__", "route",
                        {"pattern": "zzz-nothing", "text": "x"})

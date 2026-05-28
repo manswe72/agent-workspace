@@ -30,6 +30,61 @@ import re
 import sqlite3
 import time
 
+
+def _has_redos_shape(pattern: str) -> bool:
+    """Heuristically detect catastrophic-backtracking shapes in a
+    user-supplied regex: a parenthesised group that is itself
+    quantified (followed by ``*``, ``+`` or ``{``) AND whose body can
+    match its input in more than one way — because it contains a
+    nested quantifier, an alternation, or a quantified sub-group.
+
+    Catches the classic ReDoS families — ``(a+)+``, ``(a*)*``,
+    ``(.*)+``, ``(a+){2,}``, ``(a|a)+`` (alternation explosion) and
+    ``((a)+)+`` (nested-group) — without false-positiving on linear
+    patterns like ``(ab)+``, ``(?:fix|feat)-``, ``[a-z]+`` or
+    ``[A-Z]{3}-\\d+``. Detecting every ReDoS pattern is undecidable;
+    this covers the practical families and the 128-char cap in
+    ``_tool_route`` bounds whatever slips through.
+
+    Used by the ``route`` MCP tool (CodeQL py/regex-injection,
+    alert #17).
+    """
+    stack: list[bool] = []     # per open group: does its body branch?
+    in_class = False           # inside a [...] character class
+    escaped = False
+    i, n = 0, len(pattern)
+    while i < n:
+        c = pattern[i]
+        if escaped:
+            escaped = False
+        elif c == "\\":
+            escaped = True
+        elif in_class:
+            if c == "]":
+                in_class = False
+        elif c == "[":
+            in_class = True
+        elif c == "(":
+            stack.append(False)
+            # Skip a group-extension marker — (?:…), (?=…), (?P<n>…) —
+            # so its '?' is never mistaken for a quantifier.
+            if i + 1 < n and pattern[i + 1] == "?":
+                i += 1
+        elif c == ")":
+            branches = stack.pop() if stack else False
+            nxt = pattern[i + 1] if i + 1 < n else ""
+            quantified = nxt in ("*", "+", "{")
+            if quantified and branches:
+                return True
+            # A quantified sub-group makes its parent able to branch
+            # (covers ((a)+)+); a plain group (ab) does not.
+            if quantified and stack:
+                stack[-1] = True
+        elif c in ("*", "+", "?", "{", "|") and stack:
+            stack[-1] = True
+        i += 1
+    return False
+
 # ── Schema ────────────────────────────────────────────────────────────────
 
 # Table-only DDL — runs first. Indexes are created in init_db AFTER
@@ -938,6 +993,18 @@ class McpServer:
                     "regex pattern too long (max 128 chars) — "
                     "this surface is for workspace-tag matching, "
                     "not arbitrary expression evaluation")
+            # Reject classic catastrophic-backtracking shapes — a
+            # quantified group whose body is itself quantified, e.g.
+            # (a+)+, (a*)*, (.*)+, (a+){2,}. Belt-and-braces over the
+            # 128-char cap above (CodeQL py/regex-injection, alert
+            # #17): the haystack is ~5 short agent ids so blow-up is
+            # already bounded to milliseconds, but rejecting the shape
+            # keeps the surface clean regardless of haystack growth.
+            if _has_redos_shape(inner):
+                raise ValueError(
+                    "regex pattern contains a nested-quantifier shape "
+                    "prone to catastrophic backtracking — simplify it "
+                    "(this surface only needs to match workspace tags)")
             try:
                 regex = re.compile(inner, re.IGNORECASE)
             except re.error as ex:
