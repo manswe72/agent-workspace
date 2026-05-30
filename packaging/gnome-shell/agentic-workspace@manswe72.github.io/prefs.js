@@ -64,7 +64,7 @@ export default class AgenticWorkspacePrefs extends ExtensionPreferences {
 
     const portRow = new Adw.SpinRow({
       title: 'Port',
-      subtitle: 'TCP port the dashboard server listens on (default 8765).',
+      subtitle: 'TCP port the dashboard server listens on (default 7020).',
       adjustment: new Gtk.Adjustment({
         lower: 1, upper: 65535,
         step_increment: 1, page_increment: 100,

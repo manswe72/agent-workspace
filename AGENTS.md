@@ -15,7 +15,7 @@ session will drop, and no follow-up can run.
 
 **Never do any of the following on your own initiative:**
 
-- `kill`/`pkill`/`killall` against `agent_workspace.py`, `agent-worktrees-server`, or anything bound to port `8765`
+- `kill`/`pkill`/`killall` against `agent_workspace.py`, `agent-worktrees-server`, or anything bound to port `7020`
 - `POST /api/restart`, `POST /api/update`, or any endpoint that respawns the server
 - `bin/agent-worktrees-restart` or any wrapper that calls it
 - `podman/docker compose restart`, `podman/docker restart agent-workspace`, `podman/docker kill`, `systemctl restart …`
@@ -24,7 +24,7 @@ session will drop, and no follow-up can run.
 If a code change you made needs the server to pick it up, **say so and stop**
 — the user will restart it themselves. The only acceptable agent action is
 *starting* the server when it is verifiably not running (no listener on
-`127.0.0.1:8765`).
+`127.0.0.1:7020`).
 
 This is a hard rule, not a preference. There is no scenario in which an
 agent should restart this server.
@@ -46,13 +46,13 @@ cd ~/github/agent-workspace
 agent-worktrees-server
 ```
 
-The server prints its URL (default `http://127.0.0.1:8765`) and opens
+The server prints its URL (default `http://127.0.0.1:7020`) and opens
 your default browser. CLI flags:
 
 | Flag | Default | Purpose |
 |---|---|---|
 | `--worktrees PATH` | `~/github/worktrees` | Root containing one dir per active issue |
-| `--port N` | `8765` | HTTP port |
+| `--port N` | `7020` | HTTP port |
 | `--behind N` | `50` | Warn when a branch is more than N commits behind upstream |
 | `--no-open` | — | Don't pop a browser tab on startup |
 | `--sync-interval N` | `10800` | Auto-sync loop interval in seconds (default 3 h; runs only when sync is ON — see `--auto-sync` / Profile → Sync) |
@@ -155,7 +155,7 @@ shows *your* commits only, regardless of how many people are syncing.
 ```bash
 podman build -t agent-workspace:latest .
 podman compose up -d
-# → http://127.0.0.1:8765/
+# → http://127.0.0.1:7020/
 ```
 
 Mount semantics are in `compose.yaml`. The agent terminal, editor open

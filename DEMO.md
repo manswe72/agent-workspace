@@ -2,7 +2,7 @@
 
 A repeatable recipe for spinning up an empty demo of agent-workspace
 on a second port (`:9001`), without disturbing your primary
-instance on `:8765`. The audience walks through "+ Add workspace" live.
+instance on `:7020`. The audience walks through "+ Add workspace" live.
 
 ## Prerequisites
 
@@ -40,7 +40,7 @@ What each flag does:
 
 | Flag | Why for the demo |
 |---|---|
-| `--port 9001` | Separate port → separate per-port SQLite cache (`activity.9001.sqlite`), pidfile, log file. Your primary :8765 is untouched. |
+| `--port 9001` | Separate port → separate per-port SQLite cache (`activity.9001.sqlite`), pidfile, log file. Your primary :7020 is untouched. |
 | `--no-sync` | The demo's empty `data/` export won't push and clobber the shared state on other machines. |
 | `--no-backup` | The scheduled-backup thread won't write any backup files during the demo. |
 | `--no-hydrate` | Skips importing `data/*/commits.jsonl` + `worktrees.json`, so the heatmap starts empty (you populate it live as you demo). |

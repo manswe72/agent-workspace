@@ -31,7 +31,7 @@ from pathlib import Path
 HOME = Path(os.path.expanduser("~"))
 DEFAULT_WORKTREES = HOME / "git" / "worktrees"
 PREFERRED_REPOS = ("core", "bssweb", "doc")
-DASHBOARD_PORT = int(os.environ.get("AGENT_WORKSPACE_PORT", "8765"))
+DASHBOARD_PORT = int(os.environ.get("AGENT_WORKSPACE_PORT", "7020"))
 
 # Instruction appended to claude's --append-system-prompt in every tab so
 # the always-load skills from CLAUDE.md fire before the user's first prompt.

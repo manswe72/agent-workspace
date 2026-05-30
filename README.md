@@ -249,7 +249,7 @@ Then:
 
 ```bash
 agent-worktrees-server         # start the dashboard
-# → opens http://127.0.0.1:8765/ in your browser
+# → opens http://127.0.0.1:7020/ in your browser
 ```
 
 Tested on Linux, macOS, and Windows (via Git Bash). The per-platform
@@ -428,7 +428,7 @@ regular tab.
 Each instance picks a per-port SQLite cache (`activity.<port>.sqlite`) and a
 per-port pidfile (`server.<port>.pid`) under `~/.cache/agent-workspace/`,
 so a second server on a different port can't trample the primary's data.
-The default port (8765) keeps the legacy `activity.sqlite` filename for
+The default port (7020) keeps the legacy `activity.sqlite` filename for
 backwards compatibility.
 
 ```bash
@@ -634,7 +634,7 @@ start. Quote the full string in bug reports.
 |---|---|
 | `bin/agent-worktrees-server` | Start the dashboard server. Writes its PID to `~/.cache/agent-workspace/server.<port>.pid` on startup. |
 | `bin/agent-worktrees-restart` | Stop the running server (via the per-port pidfile) and start a fresh one detached. Accepts `--port N`; other flags forwarded. Logs to `~/.cache/agent-workspace/server.<port>.log`. `bin/agent-workspace-restart` is a legacy-alias symlink to the same script. |
-| `bin/agent-worktrees-stop` | Stop a running server. Reads the per-port pidfile, sends SIGTERM, escalates to SIGKILL on timeout. Accepts `--port N` (default 8765). |
+| `bin/agent-worktrees-stop` | Stop a running server. Reads the per-port pidfile, sends SIGTERM, escalates to SIGKILL on timeout. Accepts `--port N` (default 7020). |
 | `bin/agent-worktrees` | Open one terminal tab per `~/github/worktrees/<issue>` with `claude --continue` already running. The system prompt is pre-loaded with workspace / branch context so the session knows what it's working on. Exports `AGENT_WORKSPACE_LAUNCHED=1` so workspace-spawned agents send notifications only to the dashboard (not GNOME notify-send). |
 | `bin/agent-workspace-launch` | Used by the freedesktop `.desktop` entry installed under `~/.local/share/applications/`. Starts the server if it isn't already running (silent no-op if it is), then opens the dashboard — `--app=<URL>` to a Chromium-family browser for a standalone window, falling back to `xdg-open` / `open`. |
 | `bin/agent-workspace-sync` | One-shot of the auto-sync tick (export SQLite → `data/<user>/`, `git add` + commit if changed, push, fetch, ff-only pull). |
@@ -771,7 +771,7 @@ only needs Python + git + ssh client.
 ```bash
 podman build -t agent-workspace:latest .
 podman compose up -d
-# → http://127.0.0.1:8765/
+# → http://127.0.0.1:7020/
 ```
 
 Mount semantics are defined in `compose.yaml`. The `🖥 Open in terminal
@@ -865,7 +865,7 @@ recorded pins at a glance.
   or any `v[0-9]*` release branch (those are released, not work-in-progress).
 - **Events not appearing.** Run `./setup.sh --enable-claude-hooks` once
   per machine. `bin/agent-event-notify` POSTs to
-  `http://127.0.0.1:${AGENT_WORKSPACE_PORT:-8765}` — set the env var if
+  `http://127.0.0.1:${AGENT_WORKSPACE_PORT:-7020}` — set the env var if
   you've moved the port. Failures are silent (best-effort) so the hook
   never blocks Claude.
 - **`auto-sync disabled` on startup.** You launched with `--no-sync` /

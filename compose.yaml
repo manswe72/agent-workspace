@@ -14,7 +14,7 @@ services:
     image: agent-workspace:latest
     container_name: agent-workspace
     ports:
-      - "127.0.0.1:8765:8765"
+      - "127.0.0.1:7020:7020"
     volumes:
       # Worktrees — read-write so the server can materialize missing dirs
       # via `git worktree add`. Make read-only if you'd rather forbid it

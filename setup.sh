@@ -971,4 +971,4 @@ echo
 ok "Setup complete."
 echo
 echo "Start the server:    agent-worktrees-server"
-echo "Open the dashboard:  http://127.0.0.1:8765/"
+echo "Open the dashboard:  http://127.0.0.1:7020/"

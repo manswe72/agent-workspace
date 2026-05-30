@@ -116,7 +116,7 @@ from awlib.weekid import iso_week_id, week_bounds  # noqa: F401
 # ── Configuration ──────────────────────────────────────────────────────────
 HOME = Path.home()
 DEFAULT_WORKTREES = HOME / "github" / "worktrees"
-DEFAULT_PORT = 8765
+DEFAULT_PORT = 7020
 DEFAULT_BEHIND_LIMIT = 50
 REPO_PRIORITY = ("core", "bssweb", "doc")  # legacy hint; no longer used as a filter
 # Repos the dashboard always wants to see for a workspace. Anything in
@@ -6021,7 +6021,7 @@ def make_handler(worktrees_root: Path, behind_limit: int,
             # so agents spawned from a demo instance on a non-default
             # port (e.g. :9001) POST their `agent-event-notify` hooks
             # back to *this* dashboard, not the user's primary on
-            # :8765. bin/agent-worktrees and the per-terminal launch
+            # :7020. bin/agent-worktrees and the per-terminal launch
             # bodies all read AGENT_WORKSPACE_PORT from the
             # environment.
             child_env = dict(os.environ)

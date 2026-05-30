@@ -20,7 +20,7 @@ COPY bin/ /app/bin/
 COPY data/ /app/data/
 RUN chmod +x /app/bin/*
 
-EXPOSE 8765
+EXPOSE 7020
 
 # tini reaps zombies (subprocess.Popen for git/etc) and forwards signals
 # cleanly so `docker stop` / `podman stop` shuts the server down on time.
@@ -28,6 +28,6 @@ ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["python3", "-u", "/app/agent_workspace.py", \
      "--no-open", \
      "--bind", "0.0.0.0", \
-     "--port", "8765", \
+     "--port", "7020", \
      "--worktrees", "/worktrees", \
      "--primaries", "/primaries"]

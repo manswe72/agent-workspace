@@ -26,7 +26,7 @@ import {
   QuickMenuToggle, SystemIndicator,
 } from 'resource:///org/gnome/shell/ui/quickSettings.js';
 
-const DEFAULT_PORT = 8765;
+const DEFAULT_PORT = 7020;
 const POLL_INTERVAL_SEC = 5;
 
 // Mirror of agent_workspace._default_cache_dir() for Linux. (macOS

@@ -5,7 +5,7 @@ agent-event-notify — Claude Code hook → agent-workspace dashboard.
 Runs as a hook command from ~/.claude/settings.json. Reads the hook
 event JSON from stdin, derives the issue from the cwd (worktrees layout
 ~/git/worktrees/<issue>/<repo>), and POSTs a normalised event to
-http://127.0.0.1:8765/api/events. Fires a desktop notification via
+http://127.0.0.1:7020/api/events. Fires a desktop notification via
 `notify-send` only for the Notification hook — that's the one Claude
 Code fires when it actually wants user input.
 
@@ -23,7 +23,7 @@ import sys
 import urllib.error
 import urllib.request
 
-PORT = int(os.environ.get("AGENT_WORKSPACE_PORT", "8765"))
+PORT = int(os.environ.get("AGENT_WORKSPACE_PORT", "7020"))
 TIMEOUT = 1.5
 
 

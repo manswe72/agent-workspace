@@ -56,7 +56,7 @@ def dashboard_mcp_url() -> str:
     header, populated from the `AGENT_WORKSPACE_AGENT_ID` env var
     that the launcher also sets per-shell."""
     import os
-    port = os.environ.get("AGENT_WORKSPACE_PORT", "8765")
+    port = os.environ.get("AGENT_WORKSPACE_PORT", "7020")
     return f"http://127.0.0.1:{port}/mcp"
 
 

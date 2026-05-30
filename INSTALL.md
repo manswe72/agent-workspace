@@ -25,7 +25,7 @@ That's it. `agent-worktrees-server` is now on your `PATH`:
 
 ```bash
 agent-worktrees-server
-# → http://127.0.0.1:8765/ opens in your browser
+# → http://127.0.0.1:7020/ opens in your browser
 ```
 
 The installer:
@@ -95,7 +95,7 @@ command -v agent-worktrees-server
 agent-worktrees-server --no-open
 
 # Hit the API from another shell
-curl -fsS http://127.0.0.1:8765/api/stats | python3 -m json.tool | head
+curl -fsS http://127.0.0.1:7020/api/stats | python3 -m json.tool | head
 ```
 
 If `command -v` finds nothing, `~/.local/bin` isn't on your `PATH`.
@@ -282,7 +282,7 @@ That's expected on a release install — it's the indicator that you're
 on the tarball install path. Re-download the latest tarball to
 upgrade. See [Upgrading](#upgrading).
 
-### Port 8765 already in use
+### Port 7020 already in use
 
 Pick a different port:
 

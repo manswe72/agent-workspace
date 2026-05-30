@@ -17,7 +17,7 @@
 # the URL — clicking the launcher twice is a request to see the
 # dashboard, not just to ensure the server is up.
 
-PORT="${AGENT_WORKSPACE_PORT:-8765}"
+PORT="${AGENT_WORKSPACE_PORT:-7020}"
 
 # Match agent_workspace.py's _default_cache_dir().
 case "$(uname -s)" in

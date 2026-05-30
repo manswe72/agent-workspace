@@ -4,7 +4,7 @@
 # to exit (escalating to SIGKILL if it hangs).
 #
 # Usage:
-#   agent-worktrees-stop                 # default port (8765)
+#   agent-worktrees-stop                 # default port (7020)
 #   agent-worktrees-stop --port 9000     # specific port
 set -euo pipefail
 
@@ -21,8 +21,8 @@ case "$(uname -s)" in
 esac
 
 # Discover --port from forwarded args. Default matches
-# agent_workspace.py (8765).
-PORT=8765
+# agent_workspace.py (7020).
+PORT=7020
 prev=""
 for a in "$@"; do
   if [[ "$prev" == "--port" || "$prev" == "-p" ]]; then

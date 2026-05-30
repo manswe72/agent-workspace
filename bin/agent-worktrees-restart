@@ -26,8 +26,8 @@ esac
 mkdir -p "$CACHE"
 
 # Discover --port from forwarded args so we target the right per-port
-# pidfile / log. Default matches agent_workspace.py (8765).
-PORT=8765
+# pidfile / log. Default matches agent_workspace.py (7020).
+PORT=7020
 prev=""
 for a in "$@"; do
   if [[ "$prev" == "--port" || "$prev" == "-p" ]]; then

@@ -21,7 +21,7 @@ sdk: org.freedesktop.Sdk
 command: agent-workspace
 
 finish-args:
-  # Local HTTP dashboard binds 127.0.0.1:8765 — networking required so
+  # Local HTTP dashboard binds 127.0.0.1:7020 — networking required so
   # the in-browser client can reach the server.
   - --share=network
   # Read the user's worktrees + git config + .claude/ data dir.

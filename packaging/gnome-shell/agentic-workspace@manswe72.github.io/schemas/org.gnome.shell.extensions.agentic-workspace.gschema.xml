@@ -19,7 +19,7 @@
     </key>
 
     <key name="port" type="i">
-      <default>8765</default>
+      <default>7020</default>
       <range min="1" max="65535"/>
       <summary>Server port</summary>
       <description>
