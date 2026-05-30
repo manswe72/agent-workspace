@@ -206,11 +206,17 @@ def _read_terminal_image_file(file_path: str, *, bind_host: str,
         return None, (403,
             "file= is disabled when the server is not bound to "
             "loopback; send the image bytes as data= instead")
+    # Containment check uses Path.is_relative_to (Python ≥ 3.9) rather
+    # than relative_to-with-catch so CodeQL's pathlib taint model
+    # recognises it as a sanitizer: the prior `relative_to` form was
+    # functionally identical but tripped CodeQL py/path-injection again
+    # (alert #18, re-fire of #16 after the PR #9 refactor).
     try:
         abs_file = Path(file_path).expanduser().resolve(strict=False)
         root = (home_root or Path.home()).resolve(strict=False)
-        abs_file.relative_to(root)
-    except (OSError, ValueError):
+    except OSError:
+        return None, (400, "file path must be inside $HOME")
+    if not abs_file.is_relative_to(root):
         return None, (400, "file path must be inside $HOME")
     if not abs_file.is_file():
         return None, (400, f"not a regular file: {abs_file}")
