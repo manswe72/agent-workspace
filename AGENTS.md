@@ -55,8 +55,9 @@ your default browser. CLI flags:
 | `--port N` | `8765` | HTTP port |
 | `--behind N` | `50` | Warn when a branch is more than N commits behind upstream |
 | `--no-open` | — | Don't pop a browser tab on startup |
-| `--sync-interval N` | `300` | Auto-sync loop interval in seconds |
-| `--no-sync` | — | Disable auto-sync entirely |
+| `--sync-interval N` | `10800` | Auto-sync loop interval in seconds (default 3 h; runs only when sync is ON — see `--auto-sync` / Profile → Sync) |
+| `--auto-sync` | — | Start with auto-sync ON (default OFF — toggle in the dashboard) |
+| `--no-sync` | — | Disable the sync thread entirely |
 
 ## Key endpoints
 
@@ -181,9 +182,11 @@ agent-workspace/
 │   ├── agent-worktrees-stop
 │   ├── agent-worktrees
 │   ├── agent-workspace-launch   ← desktop launcher (--app= PWA style)
+│   ├── agent-workspace-restart  → symlink to agent-worktrees-restart (legacy alias)
 │   ├── agent-workspace-sync
 │   ├── agent-event-notify
 │   ├── agent-mailbox-inject
+│   ├── install-hooks            ← installs the pre-push hook (ruff + pytest)
 │   ├── build-release-tarball.sh
 │   └── release.sh
 ├── completions/           ← bash completions

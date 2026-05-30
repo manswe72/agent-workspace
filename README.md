@@ -357,7 +357,7 @@ follow the same rule, so Python and the wrappers always agree.
 |---|---|
 | Dashboard server (HTTP, SQLite, agent events, backups, sync) | ✅ works |
 | Backup git bundles (`git bundle`) | ✅ works |
-| 💻 Console button (opens terminal tab with `claude --continue`) | ✅ Terminal.app via AppleScript (auto-detected); Ghostty also supported if installed |
+| 💻 Console button (opens a terminal tab with the active Agent CLI) | ✅ Terminal.app via AppleScript (auto-detected); Ghostty also supported if installed |
 | Editor open buttons | ✅ Detects VS Code / Cursor / Sublime / Zed / Windsurf / IntelliJ family — also BBEdit, MacVim, TextMate, Nova when their CLI helpers are on PATH (VS Code's "Install 'code' in PATH" command etc.) |
 | Desktop popups for Claude `Notification` hooks | ✅ routes through `osascript`'s `display notification` (built-in Notification Center popup) when `sys.platform == "darwin"`; `notify-send` is used on Linux |
 
@@ -633,9 +633,10 @@ start. Quote the full string in bug reports.
 | Script | Purpose |
 |---|---|
 | `bin/agent-worktrees-server` | Start the dashboard server. Writes its PID to `~/.cache/agent-workspace/server.<port>.pid` on startup. |
-| `bin/agent-worktrees-restart` | Stop the running server (via the per-port pidfile) and start a fresh one detached. Accepts `--port N`; other flags forwarded. Logs to `~/.cache/agent-workspace/server.<port>.log`. |
+| `bin/agent-worktrees-restart` | Stop the running server (via the per-port pidfile) and start a fresh one detached. Accepts `--port N`; other flags forwarded. Logs to `~/.cache/agent-workspace/server.<port>.log`. `bin/agent-workspace-restart` is a legacy-alias symlink to the same script. |
 | `bin/agent-worktrees-stop` | Stop a running server. Reads the per-port pidfile, sends SIGTERM, escalates to SIGKILL on timeout. Accepts `--port N` (default 8765). |
 | `bin/agent-worktrees` | Open one terminal tab per `~/github/worktrees/<issue>` with `claude --continue` already running. The system prompt is pre-loaded with workspace / branch context so the session knows what it's working on. Exports `AGENT_WORKSPACE_LAUNCHED=1` so workspace-spawned agents send notifications only to the dashboard (not GNOME notify-send). |
+| `bin/agent-workspace-launch` | Used by the freedesktop `.desktop` entry installed under `~/.local/share/applications/`. Starts the server if it isn't already running (silent no-op if it is), then opens the dashboard — `--app=<URL>` to a Chromium-family browser for a standalone window, falling back to `xdg-open` / `open`. |
 | `bin/agent-workspace-sync` | One-shot of the auto-sync tick (export SQLite → `data/<user>/`, `git add` + commit if changed, push, fetch, ff-only pull). |
 | `bin/agent-event-notify` | Hook script invoked by Claude Code (see above). Skips `notify-send` when `AGENT_WORKSPACE_LAUNCHED=1`. |
 | `bin/agent-mailbox-inject` | UserPromptSubmit hook — prepends "📬 You have N unread message(s)…" to the agent's next turn when its agent-workspace MCP mailbox has anything. Fail-open: any error / missing dashboard exits 0 with no output so the prompt always goes through. |
@@ -713,17 +714,12 @@ agent-workspace/
 │   └── worktrees-AGENTS.md   ← installed by setup.sh into ~/github/worktrees/AGENTS.md,
 │                                 read automatically by every dashboard-spawned agent
 ├── static/                ← dashboard CSS / JS / favicon / manifest / sw.js
-├── bin/
-│   ├── agent-worktrees-server
-│   ├── agent-worktrees-restart
-│   ├── agent-worktrees-stop
-│   ├── agent-worktrees
-│   ├── agent-workspace-sync
-│   ├── agent-event-notify
-│   └── agent-mailbox-inject
+├── bin/                   ← launcher + helper scripts (see Companion scripts)
 ├── completions/           ← bash completions, installed by setup.sh
 ├── data/                  ← committed: each user's exported state
-└── README.md / AGENTS.md
+└── README.md              ← this file (user-facing)
+    AGENTS.md              ← agent-facing companion (symlinked from CLAUDE.md)
+    INSTALL.md             ← release-install + per-platform notes
 ```
 
 ### Outside the repo (state the server reads / writes)
@@ -778,10 +774,10 @@ podman compose up -d
 # → http://127.0.0.1:8765/
 ```
 
-See `AGENTS.md` for mount semantics. The `🖥 Open in terminal tabs` button
-and the `↗ Open in editor` buttons don't work inside the container (no
-GUI binaries) — run `bin/agent-worktrees-server` on the host directly
-when you want those.
+Mount semantics are defined in `compose.yaml`. The `🖥 Open in terminal
+tabs` button and the `↗ Open in editor` buttons don't work inside the
+container (no GUI binaries) — run `bin/agent-worktrees-server` on the
+host directly when you want those.
 
 ## Security: pin agent CLI versions
 
