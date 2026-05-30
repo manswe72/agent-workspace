@@ -8017,6 +8017,24 @@
     while (i < lines.length) {
       const line = lines[i];
 
+      // Raw HTML block — the inline renderer can't display tags like
+      // `<p align="center"><img …></p>` (used at the top of README
+      // for the dashboard screenshot). Skip from a line starting with
+      // a tag through the matching closing tag's line so the user
+      // doesn't see literal markup.
+      const htmlOpen = /^<([a-zA-Z][a-zA-Z0-9-]*)\b/.exec(line);
+      if (htmlOpen) {
+        const tag = htmlOpen[1].toLowerCase();
+        const closeRe = new RegExp(`</${tag}\\s*>`, 'i');
+        // Self-closing on the same line (e.g. `<img …/>`) — skip just it.
+        if (/\/>\s*$/.test(line) || closeRe.test(line)) { i++; continue; }
+        // Otherwise skip lines until we find the closing tag.
+        i++;
+        while (i < lines.length && !closeRe.test(lines[i])) i++;
+        if (i < lines.length) i++;
+        continue;
+      }
+
       // Fenced code block
       if (/^```/.test(line)) {
         const lang = line.slice(3).trim();
