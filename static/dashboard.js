@@ -2742,6 +2742,26 @@
     } catch { return []; }
   }
 
+  // Server is the source of truth for `injected-skills`. Hydrate the
+  // localStorage mirror from /api/preferences so a fresh browser (or
+  // a hard refresh — the initial-state JSON is the {_pending: true}
+  // sentinel and carries no prefs) still sees what was saved.
+  async function hydrateInjectedSkillsFromServer() {
+    try {
+      const r = await fetch('/api/preferences', { cache: 'no-store' });
+      if (!r.ok) return getInjectedSkills();
+      const d = await r.json();
+      const raw = d.preferences?.['injected-skills'];
+      const list = Array.isArray(raw)
+        ? raw.filter(e => e && typeof e?.path === 'string')
+        : [];
+      prefs.setItem('injected-skills', JSON.stringify(list));
+      return list;
+    } catch {
+      return getInjectedSkills();
+    }
+  }
+
   async function setInjectedSkills(list) {
     const safe = list.filter(e => e && typeof e.path === 'string');
     prefs.setItem('injected-skills', JSON.stringify(safe));
@@ -2791,10 +2811,9 @@
     );
   }
 
-  function refreshProfileSkillsList() {
+  function _renderSkillsList(list) {
     const host = document.getElementById('profile-skills-list');
     if (!host) return;
-    const list = getInjectedSkills();
     if (list.length === 0) {
       host.replaceChildren(
         h('span', { class: 'muted' }, t('profile.skills.empty')));
@@ -2821,6 +2840,15 @@
                                                     has_skill_md: false,
                                                     parsed_name: null }));
     });
+  }
+
+  function refreshProfileSkillsList() {
+    // Paint the local-mirror view immediately so the user gets a
+    // first frame without waiting on the fetch — then reconcile
+    // against the server's authoritative copy once it lands.
+    _renderSkillsList(getInjectedSkills());
+    hydrateInjectedSkillsFromServer().then(list =>
+      _renderSkillsList(list));
   }
 
   function renderSkillRow(entry, idx, counts) {
@@ -4194,6 +4222,8 @@
       } else if (profileActiveTab === 'backup') {
         fetchBackupSettings();
         fetchBackupHistory();
+      } else if (profileActiveTab === 'skills') {
+        refreshProfileSkillsList();
       }
       // Resolve the popover fresh on every event so the closer survives
       // a renderApp() re-render (the original popover element is
