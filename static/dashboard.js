@@ -285,10 +285,10 @@
       'help.feat.tabs':         'Tabs across the top: one per {root}/<issue>/. The ⓘ icon shows a per-repo ↓↑ table on hover.',
       'help.feat.bell':         '🔔 Agent events: per-tab badge counts unread events. Click the badge for a per-issue modal; the toolbar 🔔 button shows everything.',
       'help.feat.notes':        '📝 Notes per issue: lightweight todo / done / not-done. Inline-editable, sortable, status-flippable.',
-      'help.feat.console':      '🤖 Agent opens the issue in a new gnome-terminal tab with `claude --continue`. ↗ Open opens the issue dir in the editor.',
+      'help.feat.console':      '🤖 Agent launches the CLI you picked in Profile → Agent CLI (Claude Code, Codex, Cursor, Gemini, Aider, Crush) inside an in-browser xterm pinned to the workspace cwd. ↗ Open opens the same dir in your editor.',
       'help.feat.git-ops':      'Per-repo Fetch / Pull --ff-only / Push buttons; disabled state explains why when divergence would block it.',
       'help.feat.themes':       'Profile popover (avatar top-right): switch theme, language, notification kinds, toggle dashboard sections.',
-      'help.docs-blurb':        'Agent information:',
+      'help.docs-blurb':        'Project documentation:',
       'tab.starting':           'Start here…',
       'tab.generic-agent':      'Agent 007',
       'tab.engineering-agent':  'Agent Engineering',
@@ -530,6 +530,7 @@
       'ui.loading-healthz':     'Loading /healthz…',
       'ui.loading-description': 'Loading description…',
       'ui.loading-readme':      'Loading README…',
+      'ui.loading-routes':      'Loading API routes…',
       'ui.removing-worktrees':  'Removing worktrees…',
       'ui.branch-age':          'Branch age: ',
       'ui.last-claude':         'Last Claude: ',
@@ -749,7 +750,7 @@
       'profile.help.mcp-enabled':    'Exposes send_message / read_messages / request_review MCP tools to each agent and surfaces unread mail as a 📬 badge on the tab. Off launches agents without the tools registered.',
       'profile.mailbox-auto-poll':       'Mailbox auto-poll',
       'profile.mailbox-auto-poll.label': 'Nudge idle agents about unread mail',
-      'profile.help.mailbox-auto-poll':  'Once a minute, if an attached agent has unread messages and the user has been idle in its terminal for at least 30s, the dashboard writes a synthetic prompt asking the agent to call read_messages and reply. Throttled per agent so a slow read does not get repeatedly poked. On by default — turn off if the synthetic prompts feel intrusive.',
+      'profile.help.mailbox-auto-poll':  'Every 20 s the dashboard scans live agent terminals. If an attached agent has unread messages and the user has been idle in its terminal for at least 15 s, the dashboard writes a synthetic prompt asking the agent to call read_messages and reply. Throttled to at most one nudge per agent per 60 s so a slow read is not repeatedly poked. On by default — turn off if the synthetic prompts feel intrusive.',
       'profile.auto-update-check':       'Dashboard auto-update check',
       'profile.auto-update-check.label': 'Watch this repo for new commits on origin',
       'profile.help.auto-update-check':  'Every 10 minutes the server runs `git fetch origin` against the dashboard repo and shows a banner when there are new commits. Off hides the banner; the server stays on the version you launched. The actual pull + restart is always opt-in via the Update now button.',
@@ -918,10 +919,10 @@
       'help.feat.tabs':         'Flikar längst upp: en per {root}/<issue>/. ⓘ-ikonen visar en per-repo ↓↑-tabell vid hover.',
       'help.feat.bell':         '🔔 Agent-händelser: per-flik-räknare för olästa händelser. Klicka på märket för en per-issue-modal; verktygsfältets 🔔-knapp visar allt.',
       'help.feat.notes':        '📝 Anteckningar per issue: lätta todo / klar / inte klar. Redigerbara inline, sorterbara, flippbar status.',
-      'help.feat.console':      '🤖 Agent öppnar issuen i ny gnome-terminal-flik med `claude --continue`. ↗ Öppna öppnar issue-katalogen i editorn.',
+      'help.feat.console':      '🤖 Agent startar den CLI du valt i Profil → Agent CLI (Claude Code, Codex, Cursor, Gemini, Aider, Crush) i en xterm i webbläsaren med arbetskatalogen satt till workspacen. ↗ Öppna öppnar samma katalog i editorn.',
       'help.feat.git-ops':      'Per-repo Fetch / Pull --ff-only / Push-knappar; inaktiverade tillstånd förklarar varför när divergens skulle blockera dem.',
       'help.feat.themes':       'Profil-popover (avatar uppe till höger): byt tema, språk, notistyper, växla dashboard-sektioner.',
-      'help.docs-blurb':        'Agentinformation:',
+      'help.docs-blurb':        'Projektdokumentation:',
       'tab.starting':           'Börja här…',
       'tab.generic-agent':      'Agent 007',
       'tab.engineering-agent':  'Agent Engineering',
@@ -1101,6 +1102,7 @@
       'ui.loading-healthz':     'Läser in /healthz…',
       'ui.loading-description': 'Läser in beskrivning…',
       'ui.loading-readme':      'Läser in README…',
+      'ui.loading-routes':      'Läser in API-routes…',
       'ui.removing-worktrees':  'Tar bort worktrees…',
       'ui.branch-age':          'Branchålder: ',
       'ui.last-claude':         'Senaste Claude: ',
@@ -1332,7 +1334,7 @@
       'profile.help.mcp-enabled':    'Exponerar verktygen send_message / read_messages / request_review till varje agent och visar olästa meddelanden som en 📬-symbol på fliken. Av startar agenter utan verktygen registrerade.',
       'profile.mailbox-auto-poll':       'Automatisk inkorgskoll',
       'profile.mailbox-auto-poll.label': 'Puffa inaktiva agenter om olästa meddelanden',
-      'profile.help.mailbox-auto-poll':  'En gång per minut: om en ansluten agent har olästa meddelanden och användaren har varit inaktiv i terminalen i minst 30 s skriver dashboarden in en syntetisk prompt som ber agenten anropa read_messages och svara. Strypt per agent så en långsam läsning inte puffas om och om igen. På som standard — slå av om de syntetiska prompterna känns påträngande.',
+      'profile.help.mailbox-auto-poll':  'Var 20:e sekund skannar dashboarden alla anslutna agentterminaler. Om en agent har olästa meddelanden och användaren har varit inaktiv i minst 15 s skriver dashboarden in en syntetisk prompt som ber agenten anropa read_messages och svara. Stryps till max en puff per agent per 60 s så en långsam läsning inte puffas om och om igen. På som standard — slå av om de syntetiska prompterna känns påträngande.',
       'profile.auto-update-check':       'Uppdateringskontroll',
       'profile.auto-update-check.label': 'Bevaka repot för nya commits på origin',
       'profile.help.auto-update-check':  'Var tionde minut kör servern `git fetch origin` mot dashboard-repot och visar en banner när det finns nya commits. Av döljer bannern; servern stannar kvar på den version du startade. Själva pull + omstart sker alltid via Uppdatera nu-knappen.',
@@ -8155,10 +8157,19 @@
         h('li', {}, t('help.feat.git-ops')),
         h('li', {}, t('help.feat.themes')),
       ),
+      h('h3', {}, t('help.section.docs')),
       h('p', { class: 'help-docs-blurb' }, t('help.docs-blurb'), ' ',
-        h('a', { href: '/static/AGENTS.md',
+        h('a', { href: '/api/docs?file=README.md',
+                  target: '_blank', rel: 'noopener noreferrer' },
+          'README.md'),
+        ' · ',
+        h('a', { href: '/api/docs?file=AGENTS.md',
                   target: '_blank', rel: 'noopener noreferrer' },
           'AGENTS.md'),
+        ' · ',
+        h('a', { href: '/api/docs?file=ROUTES.md',
+                  target: '_blank', rel: 'noopener noreferrer' },
+          'ROUTES.md'),
         '.',
       ),
     );
@@ -8174,7 +8185,7 @@
     const apiPane = h('div', {
       class: 'help-tab-pane api-tab-pane', id: 'help-pane-api', hidden: '' },
       h('div', { id: 'help-api-routes', class: 'md-rendered' },
-        h('span', { class: 'muted' }, t('ui.loading-readme'))),
+        h('span', { class: 'muted' }, t('ui.loading-routes'))),
     );
 
     const tabs = [
@@ -8231,11 +8242,11 @@
         if (host) host.replaceChildren(
           h('span', { class: 'muted' }, 'Could not load README: ' + err));
       });
-    fetch('/static/ROUTES.md', { cache: 'no-store' })
-      .then(r => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)))
-      .then(text => {
+    fetch('/api/docs?file=ROUTES.md', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+      .then(d => {
         const host = document.getElementById('help-api-routes');
-        if (host) host.replaceChildren(renderMarkdown(text));
+        if (host) host.replaceChildren(renderMarkdown(d.content || ''));
       })
       .catch(err => {
         const host = document.getElementById('help-api-routes');

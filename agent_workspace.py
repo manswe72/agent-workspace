@@ -5404,15 +5404,19 @@ def make_handler(worktrees_root: Path, behind_limit: int,
 
             elif path == "/api/docs":
                 # In-app docs viewer: returns the raw markdown of one
-                # of the project doc files. Allowlisted to prevent the
-                # endpoint becoming a generic file reader.
-                allowed = {"README.md", "AGENTS.md"}
+                # of the project doc files. Allowlist + per-file path
+                # so the endpoint never becomes a generic file reader.
+                allowed = {
+                    "README.md":  REPO_DIR / "README.md",
+                    "AGENTS.md":  REPO_DIR / "AGENTS.md",
+                    "ROUTES.md":  STATIC_DIR / "ROUTES.md",
+                }
                 qs = urllib.parse.parse_qs(parsed.query)
                 name = (qs.get("file", ["README.md"])[0] or "").strip()
-                if name not in allowed:
+                doc_path = allowed.get(name)
+                if doc_path is None:
                     self._send_json(400, {"error": "unknown doc file"})
                     return
-                doc_path = REPO_DIR / name
                 try:
                     body = doc_path.read_text(encoding="utf-8")
                 except OSError as ex:
