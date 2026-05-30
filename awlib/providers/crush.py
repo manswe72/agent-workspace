@@ -21,6 +21,7 @@ class CrushProvider(AgentProvider):
         sys_prompt: str,
         model: str | None,
         mcp_config_path: Path | None,
+        aider_skill_path: Path | None = None,
     ) -> str:
         marker = marker_file(Path.cwd(), self.id)
         liveness = liveness_bash_block(marker)

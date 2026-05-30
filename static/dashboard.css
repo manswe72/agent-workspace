@@ -4196,3 +4196,106 @@ nav.tabs .github-pill { font-size: 10px; }
 .demo-panel-buttons .btn-inline {
   padding: 4px 10px; font-size: 12px;
 }
+
+/* ── Profile → Skills tab ──────────────────────────────────────────── */
+.skills-toolbar {
+  display: flex; align-items: center;
+  margin: 0.6rem 0 0.4rem;
+}
+.skills-list {
+  display: flex; flex-direction: column; gap: 0.4rem;
+  padding: 0.4rem;
+  border: 1px dashed var(--border-2, var(--border, #2c3340));
+  border-radius: 6px;
+  min-height: 60px;
+}
+.skills-list.drop {
+  border-color: var(--accent, #5294e2);
+  background: rgba(82, 148, 226, 0.08);
+}
+.skill-row {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--panel-2, var(--panel, #1f242c));
+  border: 1px solid var(--border, #2c3340);
+  border-radius: 6px;
+}
+.skill-row.shadowed { border-color: #c89216; }
+.skill-row-body { flex: 1; min-width: 0; }
+.skill-row-head {
+  display: flex; align-items: center; gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.skill-row-path {
+  font-size: 12px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+  margin-top: 0.15rem;
+}
+.skill-row-status { display: inline-flex; align-items: center; }
+
+/* ── Generic modal scaffold (also used by the FS browser) ─────────── */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1500;
+}
+.modal {
+  background: var(--panel, #1f242c);
+  color: var(--fg, #d8dde6);
+  border: 1px solid var(--border, #2c3340);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  max-width: 760px; width: 92vw;
+  max-height: 86vh; display: flex; flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+.modal-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.modal-row { display: flex; align-items: center; gap: 0.4rem;
+              margin-bottom: 0.5rem; }
+.modal-foot {
+  display: flex; justify-content: flex-end; gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+/* ── FS-browse modal specifics ────────────────────────────────────── */
+.skill-browser-path {
+  flex: 1; padding: 0.3rem 0.5rem;
+  background: var(--panel-2, var(--panel, #181c23));
+  color: var(--fg, #d8dde6);
+  border: 1px solid var(--border, #2c3340);
+  border-radius: 4px;
+  font-family: var(--mono, monospace);
+  font-size: 12px;
+}
+.skill-browser-list {
+  flex: 1; overflow: auto;
+  border: 1px solid var(--border, #2c3340);
+  border-radius: 4px;
+  background: var(--panel-2, var(--panel, #181c23));
+  padding: 0.3rem;
+}
+.skill-browser-row {
+  display: flex; align-items: center; gap: 0.5rem;
+  width: 100%; text-align: left;
+  padding: 0.35rem 0.5rem;
+  background: transparent; color: var(--fg, #d8dde6);
+  border: none; border-radius: 4px; cursor: pointer;
+  font-size: 13px;
+}
+.skill-browser-row:hover:not(:disabled) {
+  background: var(--panel, #1f242c);
+}
+.skill-browser-row:disabled { opacity: 0.55; cursor: default; }
+.skill-browser-row.file { opacity: 0.65; }
+.skill-browser-row.denied { opacity: 0.55; }
+.skill-browser-row.is-skill { color: var(--accent, #5294e2); }
+.skill-browser-icon { width: 1.2em; text-align: center; }
+.skill-browser-name { flex: 1; }
+.skill-browser-status {
+  font-size: 12px; margin-top: 0.4rem;
+}

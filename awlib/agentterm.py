@@ -710,7 +710,8 @@ def build_agent_argv(issue: str,
                      working_dir: Path, branch: str | None,
                      model: str | None = None,
                      mcp_config_path: Path | None = None,
-                     provider_id: str = "claude") -> list[str]:
+                     provider_id: str = "claude",
+                     injected_skills: list[dict] | None = None) -> list[str]:
     """Build the `bash -c` argv that the pty execs. Mirrors the
     LAUNCH_BODY in bin/agent-worktrees so the inline session is
     behaviourally byte-identical to the external one.
@@ -773,12 +774,28 @@ def build_agent_argv(issue: str,
             "subdirectory is a repo worktree on its own per-workspace branch."
         )
         sys_prompt = "\n".join(prompt_lines)
+    # Skill injection — runs after the base sys_prompt has been built
+    # so the skill bodies splice in cache-friendly between the
+    # dashboard-general and workspace-specific parts. Best-effort; the
+    # dispatcher swallows every exception so a sloppy SKILL.md folder
+    # cannot stop an agent from launching.
+    aider_skill_path: Path | None = None
+    if injected_skills:
+        from awlib.providers.base import inject_skills
+        sys_prompt, aider_skill_path = inject_skills(
+            provider_id=provider_id,
+            injected=injected_skills,
+            working_dir=working_dir,
+            agent_id=issue,
+            sys_prompt=sys_prompt,
+        )
     provider = providers.get(provider_id)
     inner = provider.build_shell_command(
         tab_title=tab_title,
         sys_prompt=sys_prompt,
         model=model,
         mcp_config_path=mcp_config_path,
+        aider_skill_path=aider_skill_path,
     )
     name_q = shlex.quote(tab_title)
     inner = (
