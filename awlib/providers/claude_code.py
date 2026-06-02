@@ -33,6 +33,7 @@ class ClaudeCodeProvider(AgentProvider):
         sys_prompt: str,
         model: str | None,
         mcp_config_path: Path | None,
+        aider_skill_path: Path | None = None,
     ) -> str:
         name_q = shlex.quote(tab_title)
         prompt_q = shlex.quote(sys_prompt)

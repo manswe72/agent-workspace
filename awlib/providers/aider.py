@@ -23,8 +23,14 @@ class AiderProvider(AgentProvider):
         sys_prompt: str,
         model: str | None,
         mcp_config_path: Path | None,
+        aider_skill_path: Path | None = None,
     ) -> str:
         marker = marker_file(Path.cwd(), self.id)
         liveness = liveness_bash_block(marker)
         model_arg = f" --model {shlex.quote(model)}" if model else ""
-        return f"{liveness}aider{model_arg}"
+        # Skill injection: the dispatcher writes a per-launch tmpfile
+        # of every injected SKILL.md body; `--read` attaches it as
+        # read-only context.
+        skill_arg = (f" --read {shlex.quote(str(aider_skill_path))}"
+                     if aider_skill_path else "")
+        return f"{liveness}aider{model_arg}{skill_arg}"

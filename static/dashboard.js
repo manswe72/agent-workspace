@@ -667,6 +667,26 @@
       'profile.agent.general.intro':   'The pinned General Agent tab launches whichever CLI you pick here. Override "Inherit default" to keep the General Agent on a different CLI than the per-workspace default.',
       'profile.agent.general.inherit': 'Inherit default',
       'profile.agent.general.inherit-tip': 'Use whatever the default is (currently {id}).',
+      'profile.tab.skills':     'Skills',
+      'profile.skills.intro':   'Inject local-disk skill folders (Claude Code layout — a folder containing SKILL.md with YAML frontmatter) into every agent session the dashboard launches. Claude Code gets native ~/.claude/skills/ symlinks; other CLIs receive the content via their rules / context files.',
+      'profile.skills.add':     'Add skill…',
+      'profile.skills.drop-hint':'…or drop a folder here',
+      'profile.skills.empty':   'No skills selected. Click "Add skill…" to pick a folder containing SKILL.md.',
+      'profile.skills.status.ok':       'SKILL.md ✓',
+      'profile.skills.status.missing':  'missing SKILL.md',
+      'profile.skills.status.gone':     'path gone',
+      'profile.skills.status.shadowed': 'name collision',
+      'profile.skills.status.linked':   'linked',
+      'profile.skills.remove':  'Remove',
+      'profile.skills.non-claude': 'Other CLIs receive skill content via their rules / context files rather than the Claude-native skill mechanism.',
+      'profile.skills.browse.title':    'Select skill folder',
+      'profile.skills.browse.select':   'Select this skill',
+      'profile.skills.browse.no-skill': 'Current folder has no SKILL.md — navigate into a skill folder.',
+      'profile.skills.browse.parent':   '⬆ up',
+      'profile.skills.browse.cancel':   'Cancel',
+      'profile.skills.toast.added':     'skill added: {name}',
+      'profile.skills.toast.removed':   'skill removed: {name}',
+      'profile.skills.toast.exists':    'already added: {path}',
       'profile.tab.model':      'Model',
       'profile.help.model':     'Each sub-tab configures one agent CLI\'s default model. The pick that runs is whatever the active provider (or per-workspace override) selects.',
       'profile.label.model':    'Model',
@@ -1249,6 +1269,26 @@
       'profile.agent.general.intro':   'Den fasta General Agent-fliken startar det CLI du väljer här. "Ärver standard" låter den följa default-agenten ovanför.',
       'profile.agent.general.inherit': 'Ärver standard',
       'profile.agent.general.inherit-tip': 'Använd standardvalet (just nu {id}).',
+      'profile.tab.skills':     'Skills',
+      'profile.skills.intro':   'Injicera lokala skill-mappar (Claude Code-format — en mapp som innehåller SKILL.md med YAML-frontmatter) i varje agent-session som startas. Claude Code får native ~/.claude/skills/-symlänkar; övriga CLI får innehållet via sina rules/kontextfiler.',
+      'profile.skills.add':     'Lägg till skill…',
+      'profile.skills.drop-hint':'…eller släpp en mapp här',
+      'profile.skills.empty':   'Inga skills valda. Klicka "Lägg till skill…" för att välja en mapp med SKILL.md.',
+      'profile.skills.status.ok':       'SKILL.md ✓',
+      'profile.skills.status.missing':  'saknar SKILL.md',
+      'profile.skills.status.gone':     'sökväg saknas',
+      'profile.skills.status.shadowed': 'namnkrock',
+      'profile.skills.status.linked':   'länkad',
+      'profile.skills.remove':  'Ta bort',
+      'profile.skills.non-claude': 'Övriga CLI får skill-innehåll via sina egna rules/kontextfiler i stället för Claudes inbyggda skill-mekanism.',
+      'profile.skills.browse.title':    'Välj skill-mapp',
+      'profile.skills.browse.select':   'Välj denna skill',
+      'profile.skills.browse.no-skill': 'Aktuell mapp saknar SKILL.md — gå in i en skill-mapp.',
+      'profile.skills.browse.parent':   '⬆ upp',
+      'profile.skills.browse.cancel':   'Avbryt',
+      'profile.skills.toast.added':     'skill tillagd: {name}',
+      'profile.skills.toast.removed':   'skill borttagen: {name}',
+      'profile.skills.toast.exists':    'redan tillagd: {path}',
       'profile.tab.model':      'Modell',
       'profile.help.model':     'Varje sub-flik konfigurerar ett agent-CLI:s standardmodell. Vald modell på körning beror på aktiv provider (eller per-workspace-override).',
       'profile.label.model':    'Modell',
@@ -2683,6 +2723,387 @@
       .catch(() => {});
   }
 
+  // ─── Profile → Skills tab ────────────────────────────────────────
+  //
+  // Lets the user pick local-disk skill folders (Claude Code layout)
+  // that the dashboard injects into every agent session at launch.
+  // Storage: `injected-skills` pref, a JSON list of {path: "..."}
+  // objects. The launch handler in agent_workspace.py reads it; the
+  // dispatcher in awlib/providers/base.py does the per-provider
+  // reconcile.
+
+  function getInjectedSkills() {
+    try {
+      const raw = prefs.getItem('injected-skills');
+      if (!raw) return [];
+      const list = JSON.parse(raw);
+      if (!Array.isArray(list)) return [];
+      return list.filter(e => e && typeof e.path === 'string');
+    } catch { return []; }
+  }
+
+  // Server is the source of truth for `injected-skills`. Hydrate the
+  // localStorage mirror from /api/preferences so a fresh browser (or
+  // a hard refresh — the initial-state JSON is the {_pending: true}
+  // sentinel and carries no prefs) still sees what was saved.
+  async function hydrateInjectedSkillsFromServer() {
+    try {
+      const r = await fetch('/api/preferences', { cache: 'no-store' });
+      if (!r.ok) return getInjectedSkills();
+      const d = await r.json();
+      const raw = d.preferences?.['injected-skills'];
+      const list = Array.isArray(raw)
+        ? raw.filter(e => e && typeof e?.path === 'string')
+        : [];
+      prefs.setItem('injected-skills', JSON.stringify(list));
+      return list;
+    } catch {
+      return getInjectedSkills();
+    }
+  }
+
+  async function setInjectedSkills(list) {
+    const safe = list.filter(e => e && typeof e.path === 'string');
+    prefs.setItem('injected-skills', JSON.stringify(safe));
+    try {
+      await fetch('/api/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preferences: { 'injected-skills': safe } }),
+      });
+    } catch (err) {
+      showToast('error', `failed to save skills: ${err}`);
+    }
+  }
+
+  function buildProfileSkillsPanel() {
+    const showNonClaudeBanner =
+      (prefs.getItem('default-provider') || 'claude').trim() !== 'claude';
+    return h('div', { class: 'profile-panel-section' },
+      h('p', { class: 'profile-help' }, t('profile.skills.intro')),
+      showNonClaudeBanner
+        ? h('p', { class: 'profile-help muted',
+                    style: { marginTop: '0.25rem' } },
+            t('profile.skills.non-claude'))
+        : null,
+      h('div', { class: 'skills-toolbar' },
+        h('button', { class: 'btn primary', type: 'button',
+                       onclick: () => openSkillBrowserModal() },
+          t('profile.skills.add')),
+        h('span', { class: 'muted', style: { marginLeft: '0.75rem' } },
+          t('profile.skills.drop-hint')),
+      ),
+      h('div', {
+        class: 'skills-list',
+        id: 'profile-skills-list',
+        ondragover: (e) => { e.preventDefault();
+                              e.currentTarget.classList.add('drop'); },
+        ondragleave: (e) =>
+          e.currentTarget.classList.remove('drop'),
+        ondrop: (e) => {
+          e.preventDefault();
+          e.currentTarget.classList.remove('drop');
+          handleSkillsDrop(e);
+        },
+      },
+        h('span', { class: 'muted' }, t('profile.skills.empty')),
+      ),
+    );
+  }
+
+  function _renderSkillsList(list) {
+    const host = document.getElementById('profile-skills-list');
+    if (!host) return;
+    if (list.length === 0) {
+      host.replaceChildren(
+        h('span', { class: 'muted' }, t('profile.skills.empty')));
+      return;
+    }
+    // Walk basenames for shadowed-name detection (UI badge only —
+    // the server-side reconcile still applies the "first pick wins"
+    // rule).
+    const counts = {};
+    for (const e of list) {
+      const name = e.path.split('/').filter(Boolean).pop() || e.path;
+      counts[name] = (counts[name] || 0) + 1;
+    }
+    host.replaceChildren(...list.map((entry, idx) =>
+      renderSkillRow(entry, idx, counts)));
+    // Async status inspection — populates each row's badges once
+    // /api/skills/inspect returns.
+    list.forEach((entry, idx) => {
+      fetch('/api/skills/inspect?path=' + encodeURIComponent(entry.path),
+            { cache: 'no-store' })
+        .then(r => r.json())
+        .then(d => updateSkillRowStatus(idx, d))
+        .catch(() => updateSkillRowStatus(idx, { exists: false,
+                                                    has_skill_md: false,
+                                                    parsed_name: null }));
+    });
+  }
+
+  function refreshProfileSkillsList() {
+    // Paint the local-mirror view immediately so the user gets a
+    // first frame without waiting on the fetch — then reconcile
+    // against the server's authoritative copy once it lands.
+    _renderSkillsList(getInjectedSkills());
+    hydrateInjectedSkillsFromServer().then(list =>
+      _renderSkillsList(list));
+  }
+
+  function renderSkillRow(entry, idx, counts) {
+    const name = entry.path.split('/').filter(Boolean).pop() || entry.path;
+    const shadowed = (counts[name] || 0) > 1;
+    return h('div', {
+      class: 'skill-row' + (shadowed ? ' shadowed' : ''),
+      'data-skill-idx': String(idx),
+    },
+      h('div', { class: 'skill-row-body' },
+        h('div', { class: 'skill-row-head' },
+          h('strong', {}, name),
+          h('span', { class: 'skill-row-status', 'data-status': '' },
+            h('span', { class: 'muted' }, '…')),
+          shadowed
+            ? h('span', { class: 'pill behind' },
+                t('profile.skills.status.shadowed'))
+            : null,
+        ),
+        h('div', { class: 'muted skill-row-path' }, entry.path),
+      ),
+      h('button', { class: 'btn ghost', type: 'button',
+                     onclick: () => removeSkillByIndex(idx) },
+        t('profile.skills.remove')),
+    );
+  }
+
+  function updateSkillRowStatus(idx, info) {
+    const row = document.querySelector(
+      `.skill-row[data-skill-idx="${idx}"]`);
+    if (!row) return;
+    const slot = row.querySelector('.skill-row-status');
+    if (!slot) return;
+    let pill;
+    if (!info.exists) {
+      pill = h('span', { class: 'pill behind' },
+                t('profile.skills.status.gone'));
+    } else if (!info.has_skill_md) {
+      pill = h('span', { class: 'pill behind' },
+                t('profile.skills.status.missing'));
+    } else {
+      pill = h('span', { class: 'pill clean' },
+                t('profile.skills.status.ok'));
+    }
+    const extras = [];
+    if (info.has_skill_md && info.parsed_name) {
+      // Folder basename wins (Claude Code's mapping). Show the
+      // frontmatter name as a hint when it disagrees.
+      const base = (row.querySelector('strong')?.textContent || '').trim();
+      if (info.parsed_name && info.parsed_name !== base) {
+        extras.push(h('span', { class: 'muted',
+                                  style: { marginLeft: '0.5rem' } },
+          'name: ', info.parsed_name));
+      }
+    }
+    slot.replaceChildren(pill, ...extras);
+  }
+
+  async function removeSkillByIndex(idx) {
+    const list = getInjectedSkills();
+    if (idx < 0 || idx >= list.length) return;
+    const removed = list[idx];
+    const name = removed.path.split('/').filter(Boolean).pop()
+                  || removed.path;
+    list.splice(idx, 1);
+    await setInjectedSkills(list);
+    refreshProfileSkillsList();
+    showToast('ok', t('profile.skills.toast.removed', { name }));
+  }
+
+  async function addSkillPath(path) {
+    if (!path) return;
+    const norm = String(path).trim();
+    if (!norm) return;
+    const list = getInjectedSkills();
+    if (list.some(e => e.path === norm)) {
+      showToast('warn', t('profile.skills.toast.exists', { path: norm }));
+      return;
+    }
+    list.push({ path: norm });
+    await setInjectedSkills(list);
+    refreshProfileSkillsList();
+    const name = norm.split('/').filter(Boolean).pop() || norm;
+    showToast('ok', t('profile.skills.toast.added', { name }));
+  }
+
+  // The drop-zone fallback. Browsers do NOT expose absolute paths
+  // for security; the best we can do is grab whichever directory
+  // name they did surface (`webkitRelativePath` or `name`) and
+  // open the picker modal at the user's $HOME. Users with a
+  // pre-existing terminal flow can paste the absolute path into
+  // the modal's path bar.
+  function handleSkillsDrop(ev) {
+    const items = ev.dataTransfer?.items;
+    let candidate = null;
+    if (items && items.length) {
+      for (const it of items) {
+        if (it.kind === 'file') {
+          const entry = it.webkitGetAsEntry && it.webkitGetAsEntry();
+          if (entry && entry.isDirectory) {
+            candidate = entry.fullPath || entry.name;
+            break;
+          }
+        }
+      }
+    }
+    // We open the picker either way; `candidate` is just a hint
+    // shown in the modal's path bar so the user can confirm.
+    openSkillBrowserModal({ hint: candidate || '' });
+  }
+
+  // Server-side filesystem browser modal. Backed by `/api/fs/browse`.
+  // Starts at $HOME unless `startPath` is given.
+  function openSkillBrowserModal({ startPath = null, hint = '' } = {}) {
+    // Close any previous instance first.
+    document.getElementById('skill-browser-modal')?.remove();
+    const modal = h('div', {
+      class: 'modal-backdrop',
+      id: 'skill-browser-modal',
+      onclick: (e) => {
+        if (e.target === modal) closeSkillBrowserModal();
+      },
+    });
+    const pathBar = h('input', {
+      class: 'skill-browser-path', type: 'text',
+      value: startPath || hint || '',
+      placeholder: '/home/...',
+      onkeydown: (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          loadBrowserPath(pathBar.value.trim());
+        }
+      },
+    });
+    const list = h('div', { class: 'skill-browser-list',
+                              id: 'skill-browser-list' },
+      h('span', { class: 'muted' }, 'loading…'));
+    const selectBtn = h('button', {
+      class: 'btn primary',
+      type: 'button',
+      id: 'skill-browser-select',
+      disabled: '',
+      onclick: () => commitBrowserSelection(),
+    }, t('profile.skills.browse.select'));
+    const status = h('div', { class: 'skill-browser-status muted',
+                                id: 'skill-browser-status' },
+      t('profile.skills.browse.no-skill'));
+    const body = h('div', { class: 'modal modal-skill-browser',
+                              role: 'dialog',
+                              'aria-modal': 'true' },
+      h('header', { class: 'modal-head' },
+        h('h2', {}, t('profile.skills.browse.title'))),
+      h('div', { class: 'modal-row' },
+        h('button', { class: 'btn ghost', type: 'button',
+                       id: 'skill-browser-up',
+                       onclick: () => navigateUp() },
+          t('profile.skills.browse.parent')),
+        pathBar,
+      ),
+      list,
+      status,
+      h('footer', { class: 'modal-foot' },
+        h('button', { class: 'btn ghost', type: 'button',
+                       onclick: () => closeSkillBrowserModal() },
+          t('profile.skills.browse.cancel')),
+        selectBtn,
+      ),
+    );
+    modal.appendChild(body);
+    document.body.appendChild(modal);
+    loadBrowserPath(startPath || '');
+  }
+
+  function closeSkillBrowserModal() {
+    document.getElementById('skill-browser-modal')?.remove();
+  }
+
+  let _skillBrowserState = { path: '', parent: null, isSkill: false };
+
+  function loadBrowserPath(p) {
+    const list = document.getElementById('skill-browser-list');
+    if (list) list.replaceChildren(h('span', { class: 'muted' }, 'loading…'));
+    fetch('/api/fs/browse?path=' + encodeURIComponent(p || ''),
+          { cache: 'no-store' })
+      .then(async r => {
+        const d = await r.json();
+        if (!r.ok) throw new Error(d?.error || ('HTTP ' + r.status));
+        renderBrowserPayload(d);
+      })
+      .catch(err => {
+        if (list) list.replaceChildren(
+          h('span', { class: 'pill behind' }, String(err.message || err)));
+      });
+  }
+
+  function renderBrowserPayload(d) {
+    _skillBrowserState = {
+      path: d.path || '',
+      parent: d.parent || null,
+      isSkill: !!d.has_skill_md,
+    };
+    const pathBar = document.querySelector('.skill-browser-path');
+    if (pathBar) pathBar.value = d.path || '';
+    const upBtn = document.getElementById('skill-browser-up');
+    if (upBtn) upBtn.disabled = d.parent ? null : '';
+    const list = document.getElementById('skill-browser-list');
+    if (list) {
+      const rows = (d.entries || []).map(e => h('button', {
+        class: 'skill-browser-row'
+                + (e.is_dir ? '' : ' file')
+                + (e.denied ? ' denied' : '')
+                + (e.has_skill_md ? ' is-skill' : ''),
+        type: 'button',
+        disabled: (e.is_dir && !e.denied) ? null : '',
+        onclick: () => {
+          if (e.is_dir && !e.denied) {
+            loadBrowserPath(
+              (d.path.endsWith('/') ? d.path : d.path + '/') + e.name);
+          }
+        },
+      },
+        h('span', { class: 'skill-browser-icon' }, e.is_dir ? '📁' : '📄'),
+        h('span', { class: 'skill-browser-name' }, e.name),
+        e.has_skill_md
+          ? h('span', { class: 'pill clean' }, 'SKILL.md')
+          : null,
+        e.denied
+          ? h('span', { class: 'pill behind' }, 'denied')
+          : null,
+      ));
+      list.replaceChildren(...(rows.length
+        ? rows
+        : [h('span', { class: 'muted' }, '(empty)')]));
+    }
+    const status = document.getElementById('skill-browser-status');
+    if (status) {
+      status.textContent = d.has_skill_md
+        ? `SKILL.md found in ${d.path}`
+        : t('profile.skills.browse.no-skill');
+    }
+    const selectBtn = document.getElementById('skill-browser-select');
+    if (selectBtn) selectBtn.disabled = d.has_skill_md ? null : '';
+  }
+
+  function navigateUp() {
+    if (_skillBrowserState.parent)
+      loadBrowserPath(_skillBrowserState.parent);
+  }
+
+  async function commitBrowserSelection() {
+    if (!_skillBrowserState.isSkill) return;
+    await addSkillPath(_skillBrowserState.path);
+    closeSkillBrowserModal();
+  }
+
   // Provider-aware Model panel. For Claude Code we still use the
   // hand-curated CLAUDE_MODEL_CHOICES (nice multi-line labels with
   // recommended-flag); for every other provider we render the bare
@@ -3704,6 +4125,9 @@
                         refreshTokenStatus(); } },
       { id: 'agent',        label: t('profile.tab.agent'),
         build: () => buildProfileAgentPanel() },
+      { id: 'skills',       label: t('profile.tab.skills'),
+        build: () => buildProfileSkillsPanel(),
+        onShow: () => { refreshProfileSkillsList(); } },
       ...(showModelTab ? [
         { id: 'model', label: t('profile.tab.model'),
           build: () => buildProfileModelPanel(activeProvider) },
@@ -3798,6 +4222,8 @@
       } else if (profileActiveTab === 'backup') {
         fetchBackupSettings();
         fetchBackupHistory();
+      } else if (profileActiveTab === 'skills') {
+        refreshProfileSkillsList();
       }
       // Resolve the popover fresh on every event so the closer survives
       // a renderApp() re-render (the original popover element is

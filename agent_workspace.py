@@ -5376,6 +5376,12 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                     ],
                 })
 
+            elif path == "/api/fs/browse":
+                self._handle_fs_browse(qs)
+
+            elif path == "/api/skills/inspect":
+                self._handle_skill_inspect(qs)
+
             elif path == "/api/github/issues":
                 force = qs.get("force", ["0"])[0] in ("1", "true", "yes")
                 items, err = _github.fetch_my_issues(force=force)
@@ -6187,6 +6193,7 @@ def make_handler(worktrees_root: Path, behind_limit: int,
             #      for the model (lets the CLI pick its own default).
             model_pref = None
             provider_pref = "claude"
+            injected_skills: list[dict] = []
             try:
                 conn = db_connect()
                 try:
@@ -6196,6 +6203,16 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                 raw_provider = (prefs.get("default-provider") or "").strip()
                 if raw_provider:
                     provider_pref = raw_provider
+                # Skill injection pref. Stored as a JSON list of
+                # {path: "..."} objects. Anything else (legacy state,
+                # corrupted JSON, wrong shape) gets quietly dropped —
+                # never block an agent launch on a malformed pref.
+                raw_skills = prefs.get("injected-skills")
+                if isinstance(raw_skills, list):
+                    injected_skills = [
+                        e for e in raw_skills
+                        if isinstance(e, dict) and isinstance(e.get("path"), str)
+                    ]
                 # General Agent's own provider override — sits between
                 # the dashboard default and any (non-existent for it)
                 # per-workspace override.
@@ -6223,7 +6240,8 @@ def make_handler(worktrees_root: Path, behind_limit: int,
                 issue, wt,
                 branch=issue, model=model_pref,
                 mcp_config_path=mcp_cfg_path,
-                provider_id=provider_pref)
+                provider_id=provider_pref,
+                injected_skills=injected_skills)
             env = self._agent_term_env(agent_id=issue)
             try:
                 session = agentterm.get_or_create(
@@ -7950,6 +7968,181 @@ def make_handler(worktrees_root: Path, behind_limit: int,
 
         def _send_json(self, code: int, obj):
             self._send(code, "application/json", json.dumps(obj).encode())
+
+        # ── /api/fs/browse + /api/skills/inspect ─────────────────────
+        #
+        # These endpoints exist for the Profile → Skills picker. The
+        # filesystem browser walks the *server's* disk so the user can
+        # point the dashboard at an absolute path (browser-native
+        # pickers redact absolute paths). Both endpoints are scoped
+        # under $HOME, refuse a denylist of sensitive dotdirs whose
+        # listings would themselves be a leak, and are gated off when
+        # the server bound to anything other than the loopback iface.
+
+        _FS_BROWSE_DENYLIST = frozenset({
+            ".ssh", ".gnupg", ".aws", ".kube", ".password-store",
+            ".docker", ".config/agent-workspace",
+        })
+
+        def _fs_browse_allowed_root(self) -> Path:
+            return Path.home()
+
+        def _fs_browse_loopback_only(self) -> bool:
+            """The FS-browse endpoints expose dashboard-local paths.
+            Allowing them across a network bind (Docker `0.0.0.0`)
+            would let any reachable host enumerate $HOME. Off unless
+            explicitly opted in via env var.
+            """
+            host = self.server.server_address[0]
+            if host in ("127.0.0.1", "::1", "localhost"):
+                return True
+            return os.environ.get("AGENT_WORKSPACE_ALLOW_FS_BROWSE_REMOTE") == "1"
+
+        def _fs_browse_denied(self, resolved: Path, home: Path) -> bool:
+            """True if `resolved` is one of the sensitive subdirs whose
+            entries we refuse to expose at all. Compares relative-to-
+            home so `.config/agent-workspace` matches at any home.
+            """
+            try:
+                rel = resolved.relative_to(home)
+            except ValueError:
+                return True
+            rel_str = str(rel)
+            for deny in self._FS_BROWSE_DENYLIST:
+                if rel_str == deny or rel_str.startswith(deny + "/"):
+                    return True
+            return False
+
+        def _resolve_under_home(self, raw_path: str) -> Path | None:
+            """Resolve `raw_path` through realpath and confirm it lives
+            inside $HOME. Returns None on escape / unreadable.
+            """
+            if not raw_path:
+                return None
+            try:
+                home = self._fs_browse_allowed_root().resolve(strict=False)
+                resolved = Path(raw_path).expanduser().resolve(strict=False)
+                resolved.relative_to(home)
+            except (OSError, ValueError):
+                return None
+            return resolved
+
+        def _handle_fs_browse(self, qs):
+            if not self._fs_browse_loopback_only():
+                self._send_json(403, {"error":
+                    "fs browse disabled on non-loopback binds; set "
+                    "AGENT_WORKSPACE_ALLOW_FS_BROWSE_REMOTE=1 to override"})
+                return
+
+            raw = (qs.get("path", [""])[0] or "").strip()
+            # Default to $HOME when no path supplied — the modal opens
+            # there. Empty-string fallback applies whether the user
+            # never typed a path or sent an empty one.
+            if not raw:
+                raw = str(self._fs_browse_allowed_root())
+            resolved = self._resolve_under_home(raw)
+            if resolved is None:
+                self._send_json(400, {"error":
+                    "path escapes $HOME or is unreadable"})
+                return
+            home = self._fs_browse_allowed_root().resolve(strict=False)
+            if self._fs_browse_denied(resolved, home):
+                self._send_json(403, {"error":
+                    "path is in the dashboard's sensitive-dir denylist"})
+                return
+            if not resolved.is_dir():
+                self._send_json(404, {"error": "not a directory"})
+                return
+
+            entries: list[dict] = []
+            try:
+                for child in sorted(resolved.iterdir(),
+                                    key=lambda p: (not p.is_dir(),
+                                                    p.name.lower())):
+                    try:
+                        is_dir = child.is_dir()
+                    except OSError:
+                        continue
+                    entry = {"name": child.name, "is_dir": is_dir}
+                    if is_dir:
+                        try:
+                            entry["has_skill_md"] = (
+                                child / "SKILL.md").is_file()
+                        except OSError:
+                            entry["has_skill_md"] = False
+                        # Tag entries that would be refused on click
+                        # so the UI can grey them out.
+                        try:
+                            child_rel = child.resolve(
+                                strict=False).relative_to(home)
+                            rel_s = str(child_rel)
+                            entry["denied"] = any(
+                                rel_s == d or rel_s.startswith(d + "/")
+                                for d in self._FS_BROWSE_DENYLIST)
+                        except (OSError, ValueError):
+                            entry["denied"] = True
+                    entries.append(entry)
+            except OSError as ex:
+                self._send_json(403, {"error": f"cannot list: {ex}"})
+                return
+
+            try:
+                parent = (resolved.parent if resolved != home else None)
+                parent_s = str(parent) if parent else None
+                if parent_s and self._resolve_under_home(parent_s) is None:
+                    parent_s = None
+            except OSError:
+                parent_s = None
+
+            has_skill_md = False
+            try:
+                has_skill_md = (resolved / "SKILL.md").is_file()
+            except OSError:
+                pass
+
+            self._send_json(200, {
+                "path": str(resolved),
+                "parent": parent_s,
+                "has_skill_md": has_skill_md,
+                "is_skill": has_skill_md,
+                "home": str(home),
+                "entries": entries,
+            })
+
+        def _handle_skill_inspect(self, qs):
+            if not self._fs_browse_loopback_only():
+                self._send_json(403, {"error":
+                    "skill inspect disabled on non-loopback binds"})
+                return
+            raw = (qs.get("path", [""])[0] or "").strip()
+            resolved = self._resolve_under_home(raw)
+            if resolved is None:
+                self._send_json(200, {"exists": False,
+                                       "has_skill_md": False,
+                                       "parsed_name": None})
+                return
+            try:
+                exists = resolved.exists()
+            except OSError:
+                exists = False
+            has = False
+            parsed = None
+            if exists and resolved.is_dir():
+                try:
+                    has = (resolved / "SKILL.md").is_file()
+                except OSError:
+                    has = False
+                if has:
+                    try:
+                        from awlib.providers.base import parse_skill_name
+                        parsed = parse_skill_name(resolved)
+                    except Exception:  # noqa: BLE001
+                        parsed = None
+            self._send_json(200, {
+                "exists": exists,
+                "has_skill_md": has,
+                "parsed_name": parsed,
+            })
 
         def _serve_static(self, name: str):
             # Allow one level of subdirectory (e.g. xterm/xterm.js)
